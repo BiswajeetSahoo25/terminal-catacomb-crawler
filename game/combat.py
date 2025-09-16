@@ -213,6 +213,28 @@ class CombatAction:
                 "exp_gained": exp_gained
             }
             return combat_result
+        # Check if attacker is a player with enhanced attack system
+        elif hasattr(attacker, 'attack_enemy') and hasattr(attacker, 'accuracy'):
+            # Use player's enhanced attack system
+            player_attack_result = attacker.attack_enemy(target)
+            
+            # Convert player attack result to combat system format
+            combat_result = {
+                "success": True,
+                "action": "attack",
+                "attacker": player_attack_result.get("attacker", attacker.name if hasattr(attacker, 'name') else "Unknown"),
+                "target": player_attack_result.get("target", target.name if hasattr(target, 'name') else "Enemy"),
+                "damage": player_attack_result.get("damage", 0),
+                "deflected": player_attack_result.get("deflected", 0),
+                "hit": player_attack_result.get("hit", True),
+                "critical": player_attack_result.get("critical", False),
+                "parried": player_attack_result.get("parried", False),
+                "target_died": player_attack_result.get("enemy_died", False),
+                "exp_gained": player_attack_result.get("exp_gained", 0),
+                "leveled_up": player_attack_result.get("leveled_up", False),
+                "message": player_attack_result.get("message", "Attack completed")
+            }
+            return combat_result
         else:
             # Use basic attack system for player or non-monster entities
             # Calculate damage with potential modifiers
@@ -227,7 +249,8 @@ class CombatAction:
             total_damage = max(1, base_damage + damage_roll)
             
             # Apply damage
-            target_died = target.take_damage(total_damage)
+            damage_result = target.take_damage(total_damage)
+            target_died = damage_result.get("died", False) if isinstance(damage_result, dict) else damage_result
             
             # Handle experience gain for player
             exp_gained = 0

@@ -783,9 +783,15 @@ class GameEngine:
                 if turn_msg:
                     # Add separator for new rounds to make them more readable
                     if "Round" in turn_msg and "begins" in turn_msg:
-                        # Keep only the last few messages and add the new round
-                        if len(self.combat_messages) > 3:
-                            self.combat_messages = self.combat_messages[-3:]
+                        # Keep important message types and recent combat actions
+                        if len(self.combat_messages) > 8:
+                            # Preserve important message types in the last few messages
+                            important_messages = []
+                            for msg in self.combat_messages[-8:]:
+                                msg_type = msg.get("type", "")
+                                if msg_type in ["combat", "deflection", "combat_detail", "system"]:
+                                    important_messages.append(msg)
+                            self.combat_messages = important_messages[-6:] if important_messages else self.combat_messages[-3:]
                         self.combat_messages.append({"type": "round_separator", "message": "---"})
                     
                     self.combat_messages.append({"type": "system", "message": turn_msg})
@@ -896,9 +902,15 @@ class GameEngine:
             # Add deflection message if damage was deflected
             deflected = result.get("deflected", 0)
             if deflected > 0:
+                damage_reduction = result.get("damage_reduction", 0)
+                if damage_reduction > 0:
+                    detailed_message = f"The Hero deflects {deflected} damage with {damage_reduction:.1f}% damage reduction!"
+                else:
+                    detailed_message = f"The Hero deflects {deflected} damage!"
+                
                 self.combat_messages.append({
                     "type": "deflection", 
-                    "message": f"The Hero deflects {deflected} damage!"
+                    "message": detailed_message
                 })
             
             # Track enemy defeats
@@ -919,31 +931,48 @@ class GameEngine:
         self.needs_render = True
         
     def enemy_combat_action(self, enemy):
-        """Execute an enemy combat action"""
-        # Simple AI: always attack player if alive
+        """Execute an enemy combat action - Use monster's detailed attack system directly"""
         if self.player.hp > 0:
-            # Use the combat system's execute_attack method directly to get rich monster attacks
-            action = COMBAT_ACTIONS["attack"]
-            result = action.execute_attack(enemy, self.player)
+            # Call monster's attack_player method directly to get rich, detailed messages
+            monster_result = enemy.attack_player(self.player)
             
-            if result["success"]:
-                # Add the main combat message
-                combat_message = {"type": "combat", **result}
-                
-                # Add deflection message if damage was deflected
-                deflected = result.get("deflected", 0)
-                if deflected > 0:
-                    # Return both messages - the combat message first, then deflection
-                    return [
-                        combat_message,
-                        {
-                            "type": "deflection", 
-                            "message": f"The Hero deflects {deflected} damage!"
-                        }
-                    ]
-                else:
-                    return combat_message
-                
+            # Create the combat message using the monster's detailed info
+            combat_message = {
+                "type": "combat",
+                "success": monster_result.get("hit", False),
+                "attacker": monster_result.get("attacker", enemy.name),
+                "attack_name": monster_result.get("attack_name", "Attack"),
+                "damage": monster_result.get("damage", 0),
+                "deflected": monster_result.get("deflected", 0),
+                "hit": monster_result.get("hit", False),
+                "description": monster_result.get("description", ""),
+                "special_effects": monster_result.get("special_effects")
+            }
+            
+            messages = [combat_message]
+            
+            # Add deflection message if damage was deflected
+            deflected = monster_result.get("deflected", 0)
+            if deflected > 0:
+                damage_reduction = monster_result.get("damage_reduction", 0)
+                detailed_message = f"The Hero deflects {deflected} damage with {damage_reduction:.1f}% damage reduction!"
+                messages.append({"type": "deflection", "message": detailed_message})
+            
+            # Add detailed miss/dodge information if attack failed
+            elif not monster_result.get("hit", False):
+                if monster_result.get("dodged"):
+                    dodge_roll = monster_result.get("dodge_roll", 0) * 100
+                    dodge_chance = monster_result.get("player_dodge_chance", 0) * 100
+                    detail_msg = f"Dodge successful: Rolled {dodge_roll:.0f}% ≤ {dodge_chance:.1f}% dodge chance"
+                    messages.append({"type": "combat_detail", "message": detail_msg})
+                elif monster_result.get("hit_roll") is not None:
+                    hit_roll = monster_result.get("hit_roll", 0) * 100
+                    accuracy = monster_result.get("monster_accuracy", 0) * 100
+                    detail_msg = f"Attack missed: Rolled {hit_roll:.0f}% > {accuracy:.0f}% accuracy"
+                    messages.append({"type": "combat_detail", "message": detail_msg})
+            
+            return messages if len(messages) > 1 else combat_message
+            
         return None
         
     def get_combat_target(self):

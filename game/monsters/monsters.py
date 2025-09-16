@@ -117,15 +117,31 @@ class Monster:
         """Check if monster is still alive"""
         return self.hp > 0
         
-    def take_damage(self, damage):
-        """Monster takes damage"""
-        actual_damage = max(1, damage - self.defense)
+    def take_damage(self, damage, attacker_armor_penetration=0):
+        """Monster takes damage with percentage-based damage reduction and armor penetration"""
+        # Calculate effective damage reduction based on armor penetration
+        effective_damage_reduction = max(0, self.derived_stats.get('damage_reduction', 0) - attacker_armor_penetration)
+        
+        # Apply percentage-based damage reduction
+        damage_reduction_factor = effective_damage_reduction / 100.0
+        damage_after_reduction = damage * (1 - damage_reduction_factor)
+        
+        # Ensure minimum damage of 1
+        actual_damage = max(1, int(damage_after_reduction))
+        deflected_damage = damage - actual_damage
+        
         self.hp -= actual_damage
         
+        died = False
         if self.hp <= 0:
             self.hp = 0
-            return True
-        return False
+            died = True
+        
+        return {
+            "died": died,
+            "deflected": deflected_damage,
+            "damage_reduction": effective_damage_reduction
+        }
         
     def get_distance_to(self, x, y):
         """Calculate distance to a position"""
@@ -310,17 +326,38 @@ class Monster:
         if chosen_attack['name'] in self.attack_cooldowns:
             self.attack_cooldowns[chosen_attack['name']] = chosen_attack['cooldown']
         
-        # Calculate hit chance
+        # Calculate hit chance vs monster accuracy
         hit_roll = random.random()
         if hit_roll > chosen_attack['accuracy']:
+            miss_reason = f" (Rolled {hit_roll*100:.0f}% vs {chosen_attack['accuracy']*100:.0f}% accuracy)"
             return {
                 "type": "combat",
                 "attacker": self.name,
                 "attack_name": chosen_attack['name'],
                 "damage": 0,
                 "hit": False,
-                "description": f"{self.name} misses!",
-                "player_died": False
+                "description": f"{self.name} misses!{miss_reason}",
+                "player_died": False,
+                "hit_roll": hit_roll,
+                "monster_accuracy": chosen_attack['accuracy']
+            }
+        
+        # Check player dodge chance
+        player_dodge_chance = min(95, max(0, player.dodge)) / 100.0  # Convert to 0-1 range, cap at 95%
+        dodge_roll = random.random()
+        if dodge_roll <= player_dodge_chance:
+            dodge_reason = f" (Rolled {dodge_roll*100:.0f}% vs {player_dodge_chance*100:.0f}% dodge chance)"
+            return {
+                "type": "combat",
+                "attacker": self.name,
+                "attack_name": chosen_attack['name'],
+                "damage": 0,
+                "hit": False,
+                "dodged": True,
+                "description": f"{player.name} dodges {self.name}'s {chosen_attack['name']}!{dodge_reason}",
+                "player_died": False,
+                "dodge_roll": dodge_roll,
+                "player_dodge_chance": player_dodge_chance
             }
         
         # Calculate damage
@@ -329,7 +366,8 @@ class Monster:
         final_damage = max(1, base_damage + damage_variance)
         
         # Apply attack to player
-        damage_result = player.take_damage(final_damage)
+        monster_armor_penetration = self.derived_stats.get('armor_penetration', 0) if hasattr(self, 'derived_stats') else 0
+        damage_result = player.take_damage(final_damage, monster_armor_penetration)
         player_died = damage_result["died"]
         
         # Handle special effects
@@ -337,13 +375,24 @@ class Monster:
         if chosen_attack['special_effects']:
             effect_description += self.apply_special_effect(chosen_attack['special_effects'], player)
         
+        # Get deflected damage for return data (UI will handle display)
+        deflected = damage_result.get("deflected", 0)
+        
         return {
             "type": "combat",
             "attacker": self.name,
             "attack_name": chosen_attack['name'],
             "damage": final_damage,
-            "deflected": damage_result["deflected"],
+            "deflected": deflected,
+            "damage_reduction": damage_result.get("damage_reduction", 0),
+            "base_damage_reduction": damage_result.get("base_damage_reduction", 0),
+            "armor_penetration": monster_armor_penetration,
+            "base_attack_damage": base_damage,
+            "damage_variance": damage_variance,
+            "original_damage": damage_result.get("original_damage", final_damage),
+            "final_damage": damage_result.get("final_damage", final_damage - deflected),
             "hit": True,
+            "dodged": False,
             "description": effect_description,
             "player_died": player_died,
             "special_effects": chosen_attack['special_effects']

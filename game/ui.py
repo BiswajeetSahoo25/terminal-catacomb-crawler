@@ -271,9 +271,26 @@ class UI:
         for msg in recent_messages:
             if msg["type"] == "combat":
                 if "target" in msg:  # Player attacking enemy
-                    text = f"{msg['attacker']} attacks {msg['target']} for {msg['damage']} damage!"
+                    # Use enhanced message if available, otherwise fall back to basic format
+                    if msg.get("message"):
+                        text = msg["message"]
+                        # Add damage amount if not in message and hit was successful
+                        if msg.get("hit", True) and f"({msg['damage']} damage)" not in text:
+                            text += f" ({msg['damage']} damage)"
+                    else:
+                        # Fallback to basic format
+                        text = f"{msg['attacker']} attacks {msg['target']} for {msg['damage']} damage!"
+                    
+                    # Add defeat and experience info
                     if msg.get("target_died"):
                         text += f" {msg['target']} defeated! (+{msg.get('exp_gained', 0)} XP)"
+                    
+                    # Add special combat indicators
+                    if msg.get("critical"):
+                        text = "💥 " + text  # Critical hit indicator
+                    if msg.get("parried"):
+                        text = "🛡️ " + text  # Parry indicator
+                    
                     print(f"  {self.terminal.green(text)}")
                 elif "defender" in msg:  # Defend action
                     print(f"  {self.terminal.blue(msg['message'])}")
@@ -299,13 +316,16 @@ class UI:
                             if effect_type:
                                 text += f" [Special: {effect_type.title()}]"
                     else:
-                        text = f"{msg['attacker']} misses completely!"
+                        # Use the detailed description from combat system - DON'T override it!
+                        text = msg.get('description', f"{msg['attacker']} misses completely!")
                     
                     if msg.get("player_died"):
                         text += " You have fallen!"
                     print(f"  {self.terminal.red(text)}")
             elif msg["type"] == "deflection":
                 print(f"  {self.terminal.blue + self.terminal.bold}⚡ {msg['message']}{self.terminal.normal}")
+            elif msg["type"] == "combat_detail":
+                print(f"  {self.terminal.dim}💡 {msg['message']}{self.terminal.normal}")
             elif msg["type"] == "round_separator":
                 print(f"  {self.terminal.dim}{msg['message']}{self.terminal.normal}")
             elif msg["type"] == "system":
