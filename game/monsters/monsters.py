@@ -293,7 +293,8 @@ class Monster:
         final_damage = max(1, base_damage + damage_variance)
         
         # Apply attack to player
-        player_died = player.take_damage(final_damage)
+        damage_result = player.take_damage(final_damage)
+        player_died = damage_result["died"]
         
         # Handle special effects
         effect_description = chosen_attack['description']
@@ -305,6 +306,7 @@ class Monster:
             "attacker": self.name,
             "attack_name": chosen_attack['name'],
             "damage": final_damage,
+            "deflected": damage_result["deflected"],
             "hit": True,
             "description": effect_description,
             "player_died": player_died,
@@ -379,6 +381,13 @@ class MonsterManager:
         alive_monsters = [monster for monster in self.enemies if monster.is_alive()]
         self.enemies = alive_monsters
         self.monsters = alive_monsters
+    
+    def remove_enemy(self, enemy):
+        """Remove a specific enemy from the list"""
+        if enemy in self.enemies:
+            self.enemies.remove(enemy)
+        if enemy in self.monsters:
+            self.monsters.remove(enemy)
         
     def update_all(self, player, level):
         """Update all monsters (AI turns) - maintains EnemyManager interface"""

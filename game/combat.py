@@ -199,18 +199,20 @@ class CombatAction:
             # Convert monster attack result to combat system format
             # Note: We don't include "target" key for monster attacks to ensure UI
             # properly identifies them as enemy attacks for rich formatting
-            return {
+            combat_result = {
                 "success": True,
                 "action": "attack",
                 "attacker": monster_attack_result.get("attacker", attacker.name if hasattr(attacker, 'name') else "Unknown"),
                 "attack_name": monster_attack_result.get("attack_name", "Attack"),
                 "damage": monster_attack_result.get("damage", 0),
+                "deflected": monster_attack_result.get("deflected", 0),
                 "hit": monster_attack_result.get("hit", True),
                 "description": monster_attack_result.get("description", ""),
                 "target_died": monster_attack_result.get("player_died", False),
                 "special_effects": monster_attack_result.get("special_effects"),
                 "exp_gained": exp_gained
             }
+            return combat_result
         else:
             # Use basic attack system for player or non-monster entities
             # Calculate damage with potential modifiers

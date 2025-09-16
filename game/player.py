@@ -82,14 +82,21 @@ class Player:
         return self.hp > 0
         
     def take_damage(self, damage):
-        """Player takes damage"""
+        """Player takes damage and returns damage info"""
         actual_damage = max(1, damage - self.defense)
+        deflected_damage = damage - actual_damage
         self.hp -= actual_damage
         
+        died = False
         if self.hp <= 0:
             self.hp = 0
-            return True  # Player died
-        return False
+            died = True
+            
+        # Return both death status and deflection info for combat messages
+        return {
+            "died": died,
+            "deflected": deflected_damage
+        }
         
     def heal(self, amount):
         """Heal the player"""
