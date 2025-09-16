@@ -3,1307 +3,346 @@ Monster Database - All game monster definitions with drop chances and attacks
 """
 
 import random
+import ast
+import operator
+
+class MonsterStatsSystem:
+    """Stats calculation system for monsters using formulas"""
+    
+    def __init__(self):
+        self.operators = {
+            ast.Add: operator.add,
+            ast.Sub: operator.sub,
+            ast.Mult: operator.mul,
+            ast.Div: operator.truediv,
+            ast.FloorDiv: operator.floordiv,
+            ast.Mod: operator.mod,
+            ast.Pow: operator.pow,
+        }
+    
+    def _safe_eval(self, node, stats_dict):
+        """Safely evaluate mathematical expressions"""
+        if isinstance(node, ast.Constant):
+            return node.value
+        elif isinstance(node, ast.Name):
+            return stats_dict.get(node.id, 0)
+        elif isinstance(node, ast.BinOp):
+            left = self._safe_eval(node.left, stats_dict)
+            right = self._safe_eval(node.right, stats_dict)
+            op = self.operators.get(type(node.op))
+            if op:
+                return op(left, right)
+        return 0
+    
+    def calculate_stats(self, base_stats, creature_type, level=1):
+        """Calculate all stats for a monster"""
+        # Get creature type data
+        creature_data = MonsterDatabase.CREATURE_TYPES.get(creature_type, MonsterDatabase.CREATURE_TYPES['brute'])
+        
+        # Calculate main stats with creature type affinities
+        main_stats = {}
+        for stat_name, base_value in base_stats.items():
+            if stat_name in MonsterDatabase.MAIN_STATS:
+                affinity = creature_data['affinities'].get(stat_name, 1.0)
+                main_stats[stat_name] = int(base_value * affinity * level)
+        
+        # Calculate derived stats using formulas
+        derived_stats = {}
+        for stat_name, formula in MonsterDatabase.DERIVED_STATS.items():
+            try:
+                tree = ast.parse(formula, mode='eval')
+                derived_stats[stat_name] = int(self._safe_eval(tree.body, main_stats))
+            except:
+                derived_stats[stat_name] = 0
+        
+        return {**main_stats, **derived_stats}
+    
+    def calculate_attack_stats(self, attack_data, main_stats):
+        """Calculate dynamic attack damage and accuracy from formulas"""
+        result = attack_data.copy()
+        
+        # Calculate damage if formula provided
+        if 'damage_formula' in attack_data:
+            try:
+                tree = ast.parse(attack_data['damage_formula'], mode='eval')
+                result['damage'] = int(self._safe_eval(tree.body, main_stats))
+            except:
+                result['damage'] = 5  # Fallback damage
+        
+        # Calculate accuracy if formula provided  
+        if 'accuracy_formula' in attack_data:
+            try:
+                tree = ast.parse(attack_data['accuracy_formula'], mode='eval')
+                accuracy = self._safe_eval(tree.body, main_stats)
+                result['accuracy'] = min(0.95, max(0.05, accuracy / 100.0))  # Convert to decimal, clamp
+            except:
+                result['accuracy'] = 0.75  # Fallback accuracy
+        
+        # Calculate special effect values if formulas provided
+        if 'special_effects' in attack_data and attack_data['special_effects']:
+            effects = result['special_effects'] = attack_data['special_effects'].copy()
+            
+            # Handle damage per turn formulas
+            if 'damage_per_turn_formula' in effects:
+                try:
+                    tree = ast.parse(effects['damage_per_turn_formula'], mode='eval')
+                    effects['damage_per_turn'] = int(self._safe_eval(tree.body, main_stats))
+                    del effects['damage_per_turn_formula']  # Remove formula after calculation
+                except:
+                    effects['damage_per_turn'] = 2  # Fallback
+        
+        return result
 
 class MonsterDatabase:
     """Central database of all monsters and related functionality"""
     
-    MONSTERS = {
+    # Main stats that define a monster's base abilities
+    MAIN_STATS = {
+        'might': 'Physical strength and raw power',
+        'agility': 'Speed, reflexes, and dexterity', 
+        'cunning': 'Intelligence, tactics, and problem-solving',
+        'vitality': 'Health, endurance, and resilience',
+        'ferocity': 'Aggression, damage potential, and combat instinct',
+        'mysticism': 'Magical power and supernatural abilities'
+    }
+    
+    # Derived stats calculated from main stats using formulas
+    DERIVED_STATS = {
+        'hp': 'vitality * 8 + might * 2',
+        'attack': 'might * 2 + ferocity * 3',
+        'defense': 'vitality * 1 + might * 1', 
+        'speed': 'agility * 2 + vitality * 1',
+        'accuracy': '70 + agility * 2 + cunning * 1',
+        'dodge': 'agility * 3 + cunning * 1',
+        'intimidation': 'ferocity * 2 + might * 1',
+        'magic_power': 'mysticism * 4 + cunning * 1',
+        'detection_range': 'cunning * 1 + agility * 1'
+    }
+    
+    # Creature types with stat affinities (multipliers for main stats)
+    CREATURE_TYPES = {
+        'brute': {
+            'description': 'Raw physical power, high health and attack',
+            'affinities': {
+                'might': 1.4, 'agility': 0.7, 'cunning': 0.6,
+                'vitality': 1.3, 'ferocity': 1.2, 'mysticism': 0.5
+            }
+        },
+        'predator': {
+            'description': 'Fast, agile hunters with keen senses', 
+            'affinities': {
+                'might': 1.1, 'agility': 1.5, 'cunning': 1.2,
+                'vitality': 0.9, 'ferocity': 1.3, 'mysticism': 0.7
+            }
+        },
+        'caster': {
+            'description': 'Magical creatures with supernatural abilities',
+            'affinities': {
+                'might': 0.7, 'agility': 1.0, 'cunning': 1.4,
+                'vitality': 0.8, 'ferocity': 0.9, 'mysticism': 1.6
+            }
+        },
+        'tank': {
+            'description': 'Heavily armored defensive creatures',
+            'affinities': {
+                'might': 1.2, 'agility': 0.6, 'cunning': 0.8,
+                'vitality': 1.6, 'ferocity': 0.9, 'mysticism': 0.7
+            }
+        },
+        'swarm': {
+            'description': 'Fast, numerous creatures that overwhelm',
+            'affinities': {
+                'might': 0.8, 'agility': 1.4, 'cunning': 1.1,
+                'vitality': 0.7, 'ferocity': 1.2, 'mysticism': 0.9
+            }
+        },
         'undead': {
-            'skeleton': {
-                'name': 'Skeleton',
-                'type': 'undead',
-                'symbol': 's',
-                'color': 'white',
-                'description': 'The animated bones of a long-dead warrior, still clinging to unlife.',
-                'stats': {
-                    'hp': 25,
-                    'attack': 8,
-                    'defense': 2,
-                    'speed': 12,
-                    'accuracy': 0.85,
-                    'exp_reward': 15
-                },
-                'ai': {
-                    'aggression': 0.9,
-                    'detection_range': 7,
-                    'intelligence': 'low'
-                },
-                'drop_chances': {
-                    'weapons': 0.15,
-                    'armor': 0.05,
-                    'shields': 0.08,
-                    'potions': 0.25
-                },
-                'possible_drops': {
-                    'weapons': ['rusted_sword'],
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Bone Strike',
-                        'damage': 8,
-                        'accuracy': 0.85,
-                        'description': 'Strikes with bony fists',
-                        'type': 'special',
-                        'cooldown': 1,
-                        'special_effects': None
-                    },
-                    {
-                        'name': 'Rattling Charge',
-                        'damage': 12,
-                        'accuracy': 0.70,
-                        'description': 'Charges forward with bones clattering',
-                        'type': 'special',
-                        'cooldown': 3,
-                        'special_effects': {
-                            'type': 'intimidate',
-                            'duration': 2,
-                            'effect': 'reduces_player_accuracy'
-                        }
-                    }
-                ]
-            },
-            'zombie': {
-                'name': 'Zombie',
-                'type': 'undead',
-                'symbol': 'z',
-                'color': 'green',
-                'description': 'A shambling corpse driven by dark magic, slow but relentless.',
-                'stats': {
-                    'hp': 40,
-                    'attack': 12,
-                    'defense': 3,
-                    'speed': 6,
-                    'accuracy': 0.75,
-                    'exp_reward': 20
-                },
-                'ai': {
-                    'aggression': 0.95,
-                    'detection_range': 4,
-                    'intelligence': 'very_low'
-                },
-                'drop_chances': {
-                    'weapons': 0.10,
-                    'armor': 0.15,
-                    'shields': 0.05,
-                    'potions': 0.30
-                },
-                'possible_drops': {
-                    'armor': ['rusted_chest'],
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Diseased Bite',
-                        'damage': 10,
-                        'accuracy': 0.75,
-                        'description': 'Bites with rotting teeth',
-                        'type': 'special',
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'poison',
-                            'duration': 3,
-                            'damage_per_turn': 2
-                        }
-                    },
-                    {
-                        'name': 'Zombie Slam',
-                        'damage': 15,
-                        'accuracy': 0.60,
-                        'description': 'Slams with decaying fists',
-                        'type': 'special',
-                        'cooldown': 1,
-                        'special_effects': None
-                    }
-                ]
-            },
-            'wraith': {
-                'name': 'Wraith',
-                'type': 'undead',
-                'symbol': 'W',
-                'color': 'cyan',
-                'description': 'A spectral being that phases through reality, emanating cold dread.',
-                'stats': {
-                    'hp': 35,
-                    'attack': 15,
-                    'defense': 1,
-                    'speed': 18,
-                    'accuracy': 0.90,
-                    'exp_reward': 35
-                },
-                'ai': {
-                    'aggression': 0.8,
-                    'detection_range': 8,
-                    'intelligence': 'high'
-                },
-                'drop_chances': {
-                    'weapons': 0.25,
-                    'armor': 0.10,
-                    'shields': 0.15,
-                    'potions': 0.20
-                },
-                'possible_drops': {
-                    'weapons': ['rusted_sword'],
-                    'shields': ['round_shield'],
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Life Drain',
-                        'damage': 8,
-                        'accuracy': 0.90,
-                        'description': 'Drains life force from the target',
-                        'type': 'special',
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'heal_self',
-                            'amount': 4
-                        }
-                    },
-                    {
-                        'name': 'Spectral Touch',
-                        'damage': 12,
-                        'accuracy': 0.80,
-                        'description': 'Touches with ethereal hands',
-                        'type': 'special',
-                        'cooldown': 1,
-                        'special_effects': {
-                            'type': 'phase_through_armor',
-                            'duration': 1,
-                            'effect': 'ignores_defense'
-                        }
-                    },
-                    {
-                        'name': 'Wail of Despair',
-                        'damage': 5,
-                        'accuracy': 0.95,
-                        'description': 'Emits a soul-chilling wail',
-                        'type': 'special',
-                        'cooldown': 3,
-                        'special_effects': {
-                            'type': 'fear',
-                            'duration': 2,
-                            'effect': 'reduces_player_attack'
-                        }
-                    }
-                ]
-            }
-        },
-        'magic': {
-            'imp': {
-                'name': 'Imp',
-                'type': 'magic',
-                'symbol': 'i',
-                'color': 'red',
-                'description': 'A small demonic creature with sharp claws and a mischievous grin.',
-                'stats': {
-                    'hp': 20,
-                    'attack': 10,
-                    'defense': 1,
-                    'speed': 15,
-                    'accuracy': 0.85,
-                    'exp_reward': 18
-                },
-                'ai': {
-                    'aggression': 0.7,
-                    'detection_range': 6,
-                    'intelligence': 'medium'
-                },
-                'drop_chances': {
-                    'weapons': 0.20,
-                    'armor': 0.05,
-                    'shields': 0.10,
-                    'potions': 0.35
-                },
-                'possible_drops': {
-                    'weapons': ['rusted_sword'],
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Fire Bolt',
-                        'damage': 12,
-                        'accuracy': 0.85,
-                        'description': 'Hurls a small ball of fire',
-                        'type': 'special',
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'burn',
-                            'duration': 2,
-                            'damage_per_turn': 3
-                        }
-                    },
-                    {
-                        'name': 'Teleport Strike',
-                        'damage': 8,
-                        'accuracy': 0.95,
-                        'description': 'Teleports behind target and strikes',
-                        'type': 'special',
-                        'cooldown': 1,
-                        'special_effects': {
-                            'type': 'surprise_attack',
-                            'effect': 'cannot_be_blocked'
-                        }
-                    }
-                ]
-            },
-            'wizard': {
-                'name': 'Dark Wizard',
-                'type': 'magic',
-                'symbol': 'W',
-                'color': 'magenta',
-                'description': 'A robed figure wielding forbidden magic and ancient knowledge.',
-                'stats': {
-                    'hp': 30,
-                    'attack': 18,
-                    'defense': 2,
-                    'speed': 10,
-                    'accuracy': 0.80,
-                    'exp_reward': 40
-                },
-                'ai': {
-                    'aggression': 0.6,
-                    'detection_range': 9,
-                    'intelligence': 'very_high'
-                },
-                'multi_attack': {
-                    'chance': 0.3,
-                    'max_attacks': 2
-                },
-                'drop_chances': {
-                    'weapons': 0.30,
-                    'armor': 0.20,
-                    'shields': 0.15,
-                    'potions': 0.40
-                },
-                'possible_drops': {
-                    'weapons': ['rusted_sword'],
-                    'armor': ['rusted_chest'],
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Magic Missile',
-                        'damage': 15,
-                        'accuracy': 0.95,
-                        'description': 'Launches guided magical projectiles',
-
-                        'type': 'special',
-
-                        'cooldown': 1,
-                        'special_effects': None
-                    },
-                    {
-                        'name': 'Armor Break',
-                        'damage': 8,
-                        'accuracy': 0.80,
-                        'description': 'Casts a spell to weaken armor',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'armor_break',
-                            'duration': 4,
-                            'effect': 'reduces_defense_by_half'
-                        }
-                    },
-                    {
-                        'name': 'Lightning Strike',
-                        'damage': 20,
-                        'accuracy': 0.70,
-                        'description': 'Calls down a bolt of lightning',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'stun',
-                            'duration': 1,
-                            'effect': 'skip_next_turn'
-                        }
-                    }
-                ]
-            },
-            'elemental': {
-                'name': 'Fire Elemental',
-                'type': 'magic',
-                'symbol': 'E',
-                'color': 'red',
-                'description': 'A being of pure flame, crackling with elemental energy.',
-                'stats': {
-                    'hp': 45,
-                    'attack': 16,
-                    'defense': 3,
-                    'speed': 12,
-                    'accuracy': 0.80,
-
-                    'exp_reward': 45
-                },
-                'ai': {
-                    'aggression': 0.85,
-                    'detection_range': 7,
-                    'intelligence': 'medium'
-                },
-                'drop_chances': {
-                    'weapons': 0.25,
-                    'armor': 0.30,
-                    'shields': 0.20,
-                    'potions': 0.25
-                },
-                'possible_drops': {
-                    'weapons': ['rusted_sword'],
-                    'armor': ['rusted_chest'],
-                    'shields': ['round_shield'],
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Flame Burst',
-                        'damage': 14,
-                        'accuracy': 0.85,
-                        'description': 'Erupts in a burst of flames',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'burn',
-                            'duration': 3,
-                            'damage_per_turn': 4
-                        }
-                    },
-                    {
-                        'name': 'Heat Wave',
-                        'damage': 10,
-                        'accuracy': 0.90,
-                        'description': 'Radiates intense heat',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'exhaustion',
-                            'duration': 2,
-                            'effect': 'reduces_speed'
-                        }
-                    },
-                    {
-                        'name': 'Inferno',
-                        'damage': 22,
-                        'accuracy': 0.60,
-                        'description': 'Creates a devastating inferno',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'burn',
-                            'duration': 4,
-                            'damage_per_turn': 5
-                        }
-                    }
-                ]
-            }
-        },
-        'flying': {
-            'bat': {
-                'name': 'Giant Bat',
-                'type': 'flying',
-                'symbol': 'b',
-                'color': 'black',
-                'description': 'A massive bat with leathery wings and razor-sharp fangs.',
-                'stats': {
-                    'hp': 18,
-                    'attack': 7,
-                    'defense': 1,
-                    'speed': 20,
-                    'accuracy': 0.80,
-
-                    'exp_reward': 12
-                },
-                'ai': {
-                    'aggression': 0.8,
-                    'detection_range': 8,
-                    'intelligence': 'low'
-                },
-                'drop_chances': {
-                    'weapons': 0.08,
-                    'armor': 0.03,
-                    'shields': 0.05,
-                    'potions': 0.20
-                },
-                'possible_drops': {
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Swoop Attack',
-                        'damage': 6,
-                        'accuracy': 0.90,
-                        'description': 'Swoops down from above',
-
-                        'type': 'special',
-
-                        'cooldown': 1,
-                        'special_effects': None
-                    },
-                    {
-                        'name': 'Echolocation Screech',
-                        'damage': 3,
-                        'accuracy': 0.95,
-                        'description': 'Emits a disorienting screech',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'disorient',
-                            'duration': 1,
-                            'effect': 'reduces_accuracy'
-                        }
-                    }
-                ]
-            },
-            'harpy': {
-                'name': 'Harpy',
-                'type': 'flying',
-                'symbol': 'H',
-                'color': 'yellow',
-                'description': 'A winged creature with the torso of a woman and talons of a bird.',
-                'stats': {
-                    'hp': 28,
-                    'attack': 11,
-                    'defense': 2,
-                    'speed': 16,
-                    'accuracy': 0.80,
-
-                    'exp_reward': 25
-                },
-                'ai': {
-                    'aggression': 0.75,
-                    'detection_range': 10,
-                    'intelligence': 'medium'
-                },
-                'drop_chances': {
-                    'weapons': 0.18,
-                    'armor': 0.12,
-                    'shields': 0.08,
-                    'potions': 0.22
-                },
-                'possible_drops': {
-                    'weapons': ['rusted_sword'],
-                    'armor': ['rusted_chest'],
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Talon Strike',
-                        'damage': 10,
-                        'accuracy': 0.85,
-                        'description': 'Rakes with sharp talons',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'bleed',
-                            'duration': 2,
-                            'damage_per_turn': 2
-                        }
-                    },
-                    {
-                        'name': 'Siren Song',
-                        'damage': 0,
-                        'accuracy': 0.80,
-                        'description': 'Sings an enchanting but dangerous song',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'charm',
-                            'duration': 1,
-                            'effect': 'skip_turn'
-                        }
-                    },
-                    {
-                        'name': 'Dive Bomb',
-                        'damage': 15,
-                        'accuracy': 0.75,
-                        'description': 'Dives from high altitude',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'knockdown',
-                            'duration': 1,
-                            'effect': 'reduces_defense'
-                        }
-                    }
-                ]
-            },
-            'dragon': {
-                'name': 'Young Dragon',
-                'type': 'flying',
-                'symbol': 'D',
-                'color': 'red',
-                'description': 'A mighty dragon, still young but already fearsome with scales and flame.',
-                'stats': {
-                    'hp': 80,
-                    'attack': 25,
-                    'defense': 8,
-                    'speed': 14,
-                    'accuracy': 0.80,
-                    'exp_reward': 100
-                },
-                'ai': {
-                    'aggression': 0.9,
-                    'detection_range': 12,
-                    'intelligence': 'very_high'
-                },
-                'multi_attack': {
-                    'chance': 0.4,
-                    'max_attacks': 3
-                },
-                'drop_chances': {
-                    'weapons': 0.40,
-                    'armor': 0.35,
-                    'shields': 0.30,
-                    'potions': 0.50
-                },
-                'possible_drops': {
-                    'weapons': ['rusted_sword'],
-                    'armor': ['rusted_chest'],
-                    'shields': ['round_shield'],
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Fire Breath',
-                        'damage': 20,
-                        'accuracy': 0.85,
-                        'description': 'Breathes a cone of intense flame',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'burn',
-                            'duration': 4,
-                            'damage_per_turn': 5
-                        }
-                    },
-                    {
-                        'name': 'Claw Slash',
-                        'damage': 18,
-                        'accuracy': 0.90,
-                        'description': 'Slashes with massive claws',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'deep_wound',
-                            'duration': 3,
-                            'damage_per_turn': 3
-                        }
-                    },
-                    {
-                        'name': 'Wing Buffet',
-                        'damage': 12,
-                        'accuracy': 0.95,
-                        'description': 'Beats wings to create powerful winds',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'knockback',
-                            'duration': 1,
-                            'effect': 'reduces_accuracy_and_speed'
-                        }
-                    },
-                    {
-                        'name': 'Tail Whip',
-                        'damage': 16,
-                        'accuracy': 0.80,
-                        'description': 'Swipes with armored tail',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'stun',
-                            'duration': 1,
-                            'effect': 'skip_next_turn'
-                        }
-                    },
-                    {
-                        'name': 'Dragon Roar',
-                        'damage': 8,
-                        'accuracy': 0.95,
-                        'description': 'Lets out a terrifying roar',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'fear',
-                            'duration': 3,
-                            'effect': 'reduces_all_stats'
-                        }
-                    }
-                ]
-            }
-        },
-        'insects': {
-            'spider': {
-                'name': 'Giant Spider',
-                'type': 'insects',
-                'symbol': 'x',
-                'color': 'black',
-                'description': 'A massive arachnid with venomous fangs and sticky webs.',
-                'stats': {
-                    'hp': 22,
-                    'attack': 9,
-                    'defense': 3,
-                    'speed': 14,
-                    'accuracy': 0.80,
-
-                    'exp_reward': 16
-                },
-                'ai': {
-                    'aggression': 0.85,
-                    'detection_range': 6,
-                    'intelligence': 'low'
-                },
-                'drop_chances': {
-                    'weapons': 0.12,
-                    'armor': 0.08,
-                    'shields': 0.06,
-                    'potions': 0.18
-                },
-                'possible_drops': {
-                    'weapons': ['rusted_sword'],
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Venomous Bite',
-                        'damage': 8,
-                        'accuracy': 0.85,
-                        'description': 'Bites with poison-dripping fangs',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'poison',
-                            'duration': 4,
-                            'damage_per_turn': 3
-                        }
-                    },
-                    {
-                        'name': 'Web Trap',
-                        'damage': 2,
-                        'accuracy': 0.90,
-                        'description': 'Shoots sticky web to entangle',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'entangle',
-                            'duration': 2,
-                            'effect': 'cannot_move_or_dodge'
-                        }
-                    }
-                ]
-            },
-            'mantis': {
-                'name': 'Praying Mantis',
-                'type': 'insects',
-                'symbol': 'M',
-                'color': 'green',
-                'description': 'A towering insect predator with scythe-like forearms.',
-                'stats': {
-                    'hp': 35,
-                    'attack': 14,
-                    'defense': 4,
-                    'speed': 16,
-                    'accuracy': 0.80,
-
-                    'exp_reward': 28
-                },
-                'ai': {
-                    'aggression': 0.9,
-                    'detection_range': 8,
-                    'intelligence': 'medium'
-                },
-                'multi_attack': {
-                    'chance': 0.35,
-                    'max_attacks': 2
-                },
-                'drop_chances': {
-                    'weapons': 0.22,
-                    'armor': 0.15,
-                    'shields': 0.10,
-                    'potions': 0.20
-                },
-                'possible_drops': {
-                    'weapons': ['rusted_sword'],
-                    'armor': ['rusted_chest'],
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Scythe Strike',
-                        'damage': 12,
-                        'accuracy': 0.90,
-                        'description': 'Slashes with razor-sharp forearms',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'precise_cut',
-                            'effect': 'ignores_partial_armor'
-                        }
-                    },
-                    {
-                        'name': 'Lightning Fast Strike',
-                        'damage': 16,
-                        'accuracy': 0.75,
-                        'description': 'Strikes with incredible speed',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'speed_attack',
-                            'effect': 'cannot_be_blocked'
-                        }
-                    },
-                    {
-                        'name': 'Predator Gaze',
-                        'damage': 0,
-                        'accuracy': 0.85,
-                        'description': 'Stares with unblinking compound eyes',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'intimidate',
-                            'duration': 2,
-                            'effect': 'reduces_player_attack'
-                        }
-                    }
-                ]
-            },
-            'beetle': {
-                'name': 'Armored Beetle',
-                'type': 'insects',
-                'symbol': 'B',
-                'color': 'brown',
-                'description': 'A heavily armored insect with a thick carapace and powerful mandibles.',
-                'stats': {
-                    'hp': 50,
-                    'attack': 10,
-                    'defense': 7,
-                    'speed': 8,
-                    'accuracy': 0.80,
-
-                    'exp_reward': 22
-                },
-                'ai': {
-                    'aggression': 0.7,
-                    'detection_range': 5,
-                    'intelligence': 'low'
-                },
-                'drop_chances': {
-                    'weapons': 0.10,
-                    'armor': 0.25,
-                    'shields': 0.20,
-                    'potions': 0.15
-                },
-                'possible_drops': {
-                    'armor': ['rusted_chest'],
-                    'shields': ['round_shield'],
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Mandible Crush',
-                        'damage': 11,
-                        'accuracy': 0.80,
-                        'description': 'Crushes with powerful jaws',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'armor_damage',
-                            'duration': 2,
-                            'effect': 'reduces_armor_effectiveness'
-                        }
-                    },
-                    {
-                        'name': 'Charge Attack',
-                        'damage': 14,
-                        'accuracy': 0.70,
-                        'description': 'Charges forward with horn lowered',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'knockdown',
-                            'duration': 1,
-                            'effect': 'reduces_defense'
-                        }
-                    }
-                ]
-            }
-        },
-        'elemental': {
-            'earth_golem': {
-                'name': 'Earth Golem',
-                'type': 'elemental',
-                'symbol': 'G',
-                'color': 'brown',
-                'description': 'A massive construct of stone and earth, slow but incredibly durable.',
-                'stats': {
-                    'hp': 70,
-                    'attack': 18,
-                    'defense': 10,
-                    'speed': 6,
-                    'accuracy': 0.80,
-
-                    'exp_reward': 50
-                },
-                'ai': {
-                    'aggression': 0.6,
-                    'detection_range': 4,
-                    'intelligence': 'very_low'
-                },
-                'drop_chances': {
-                    'weapons': 0.15,
-                    'armor': 0.30,
-                    'shields': 0.25,
-                    'potions': 0.10
-                },
-                'possible_drops': {
-                    'armor': ['rusted_chest'],
-                    'shields': ['round_shield'],
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Boulder Fist',
-                        'damage': 20,
-                        'accuracy': 0.75,
-                        'description': 'Pounds with massive stone fists',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'knockdown',
-                            'duration': 1,
-                            'effect': 'reduces_defense'
-                        }
-                    },
-                    {
-                        'name': 'Earth Tremor',
-                        'damage': 12,
-                        'accuracy': 0.90,
-                        'description': 'Causes the ground to shake',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'tremor',
-                            'duration': 1,
-                            'effect': 'reduces_accuracy_and_speed'
-                        }
-                    }
-                ]
-            },
-            'water_spirit': {
-                'name': 'Water Spirit',
-                'type': 'elemental',
-                'symbol': '~',
-                'color': 'blue',
-                'description': 'A flowing being of pure water, shifting and changing like the tide.',
-                'stats': {
-                    'hp': 40,
-                    'attack': 12,
-                    'defense': 3,
-                    'speed': 18,
-                    'accuracy': 0.80,
-
-                    'exp_reward': 35
-                },
-                'ai': {
-                    'aggression': 0.7,
-                    'detection_range': 7,
-                    'intelligence': 'medium'
-                },
-                'drop_chances': {
-                    'weapons': 0.18,
-                    'armor': 0.08,
-                    'shields': 0.12,
-                    'potions': 0.40
-                },
-                'possible_drops': {
-                    'weapons': ['rusted_sword'],
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Water Whip',
-                        'damage': 10,
-                        'accuracy': 0.85,
-                        'description': 'Lashes out with a tendril of water',
-
-                        'type': 'special',
-
-                        'cooldown': 1,
-                        'special_effects': None
-                    },
-                    {
-                        'name': 'Tidal Wave',
-                        'damage': 15,
-                        'accuracy': 0.75,
-                        'description': 'Crashes forward in a wave',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'knockback',
-                            'duration': 1,
-                            'effect': 'reduces_accuracy_and_speed'
-                        }
-                    },
-                    {
-                        'name': 'Healing Flow',
-                        'damage': 0,
-                        'accuracy': 1.0,
-                        'description': 'Channels water to heal wounds',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'heal_self',
-                            'amount': 15
-                        }
-                    }
-                ]
-            },
-            'air_wisp': {
-                'name': 'Air Wisp',
-                'type': 'elemental',
-                'symbol': 'o',
-                'color': 'cyan',
-                'description': 'A swirling vortex of wind and cloud, barely visible but deadly.',
-                'stats': {
-                    'hp': 25,
-                    'attack': 8,
-                    'defense': 1,
-                    'speed': 22,
-                    'accuracy': 0.80,
-
-                    'exp_reward': 20
-                },
-                'ai': {
-                    'aggression': 0.8,
-                    'detection_range': 9,
-                    'intelligence': 'medium'
-                },
-                'drop_chances': {
-                    'weapons': 0.12,
-                    'armor': 0.05,
-                    'shields': 0.08,
-                    'potions': 0.25
-                },
-                'possible_drops': {
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Wind Blade',
-                        'damage': 7,
-                        'accuracy': 0.95,
-                        'description': 'Slices with razor-sharp wind',
-
-                        'type': 'special',
-
-                        'cooldown': 1,
-                        'special_effects': None
-                    },
-                    {
-                        'name': 'Whirlwind',
-                        'damage': 10,
-                        'accuracy': 0.80,
-                        'description': 'Creates a spinning vortex',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'disorient',
-                            'duration': 2,
-                            'effect': 'reduces_accuracy'
-                        }
-                    }
-                ]
-            }
-        },
-        'beasts': {
-            'wolf': {
-                'name': 'Dire Wolf',
-                'type': 'beasts',
-                'symbol': 'w',
-                'color': 'gray',
-                'description': 'A massive wolf with glowing eyes and razor-sharp fangs.',
-                'stats': {
-                    'hp': 32,
-                    'attack': 13,
-                    'defense': 4,
-                    'speed': 16,
-                    'accuracy': 0.80,
-
-                    'exp_reward': 24
-                },
-                'ai': {
-                    'aggression': 0.85,
-                    'detection_range': 8,
-                    'intelligence': 'medium'
-                },
-                'multi_attack': {
-                    'chance': 0.2,
-                    'max_attacks': 2
-                },
-                'drop_chances': {
-                    'weapons': 0.15,
-                    'armor': 0.12,
-                    'shields': 0.08,
-                    'potions': 0.18
-                },
-                'possible_drops': {
-                    'weapons': ['rusted_sword'],
-                    'armor': ['rusted_chest'],
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Savage Bite',
-                        'damage': 12,
-                        'accuracy': 0.85,
-                        'description': 'Bites with powerful jaws',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'bleed',
-                            'duration': 3,
-                            'damage_per_turn': 2
-                        }
-                    },
-                    {
-                        'name': 'Pack Howl',
-                        'damage': 0,
-                        'accuracy': 0.90,
-                        'description': 'Howls to intimidate prey',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'fear',
-                            'duration': 2,
-                            'effect': 'reduces_player_attack'
-                        }
-                    },
-                    {
-                        'name': 'Pounce',
-                        'damage': 15,
-                        'accuracy': 0.75,
-                        'description': 'Leaps forward with claws extended',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'knockdown',
-                            'duration': 1,
-                            'effect': 'reduces_defense'
-                        }
-                    }
-                ]
-            },
-            'bear': {
-                'name': 'Cave Bear',
-                'type': 'beasts',
-                'symbol': 'B',
-                'color': 'brown',
-                'description': 'An enormous bear with thick fur and crushing claws.',
-                'stats': {
-                    'hp': 65,
-                    'attack': 20,
-                    'defense': 6,
-                    'speed': 10,
-                    'accuracy': 0.80,
-
-                    'exp_reward': 45
-                },
-                'ai': {
-                    'aggression': 0.9,
-                    'detection_range': 6,
-                    'intelligence': 'low'
-                },
-                'multi_attack': {
-                    'chance': 0.3,
-                    'max_attacks': 2
-                },
-                'drop_chances': {
-                    'weapons': 0.20,
-                    'armor': 0.25,
-                    'shields': 0.15,
-                    'potions': 0.30
-                },
-                'possible_drops': {
-                    'weapons': ['rusted_sword'],
-                    'armor': ['rusted_chest'],
-                    'shields': ['round_shield'],
-                    'potions': ['health_potion']
-                },
-                'attacks': [
-                    {
-                        'name': 'Claw Swipe',
-                        'damage': 18,
-                        'accuracy': 0.80,
-                        'description': 'Swipes with massive claws',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'deep_wound',
-                            'duration': 2,
-                            'damage_per_turn': 4
-                        }
-                    },
-                    {
-                        'name': 'Bear Hug',
-                        'damage': 15,
-                        'accuracy': 0.85,
-                        'description': 'Grapples and crushes',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'grapple',
-                            'duration': 2,
-                            'effect': 'cannot_move_reduces_damage'
-                        }
-                    },
-                    {
-                        'name': 'Intimidating Roar',
-                        'damage': 5,
-                        'accuracy': 0.95,
-                        'description': 'Lets out a terrifying roar',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'fear',
-                            'duration': 2,
-                            'effect': 'reduces_all_stats'
-                        }
-                    }
-                ]
-            }
-        },
-        'constructs': {
-            'golem': {
-                'name': 'Stone Golem',
-                'type': 'constructs',
-                'symbol': 'G',
-                'color': 'gray',
-                'description': 'An ancient construct of carved stone, powered by mysterious runes.',
-                'stats': {
-                    'hp': 85,
-                    'attack': 22,
-                    'defense': 12,
-                    'speed': 4,
-                    'accuracy': 0.80,
-
-                    'exp_reward': 60
-                },
-                'ai': {
-                    'aggression': 0.5,
-                    'detection_range': 3,
-                    'intelligence': 'very_low'
-                },
-                'multi_attack': {
-                    'chance': 0.25,
-                    'max_attacks': 2
-                },
-                'drop_chances': {
-                    'weapons': 0.10,
-                    'armor': 0.35,
-                    'shields': 0.30,
-                    'potions': 0.05
-                },
-                'possible_drops': {
-                    'armor': ['rusted_chest'],
-                    'shields': ['round_shield']
-                },
-                'attacks': [
-                    {
-                        'name': 'Stone Fist',
-                        'damage': 25,
-                        'accuracy': 0.70,
-                        'description': 'Pounds with enormous stone fists',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'armor_break',
-                            'duration': 3,
-                            'effect': 'reduces_defense_by_half'
-                        }
-                    },
-                    {
-                        'name': 'Rune Burst',
-                        'damage': 18,
-                        'accuracy': 0.85,
-                        'description': 'Magical runes flare with power',
-
-                        'type': 'special',
-
-                        'cooldown': 2,
-                        'special_effects': {
-                            'type': 'magic_damage',
-                            'effect': 'ignores_all_armor'
-                        }
-                    }
-                ]
+            'description': 'Reanimated creatures with unnatural resilience',
+            'affinities': {
+                'might': 1.0, 'agility': 0.8, 'cunning': 0.7,
+                'vitality': 1.2, 'ferocity': 1.1, 'mysticism': 1.3
             }
         }
     }
     
+    MONSTERS = {
+        'undead': {
+            'skeleton_warrior': {
+                'name': 'Skeleton Warrior', 'type': 'undead', 'symbol': 'S', 'color': 'white',
+                'description': 'An undead warrior wielding ancient weapons, bones clicking with each movement.',
+                'creature_type': 'undead', 'level': 1,
+                'base_stats': {'might': 7, 'agility': 6, 'cunning': 4, 'vitality': 6, 'ferocity': 7, 'mysticism': 5},
+                'exp_reward': 20,
+                'drop_chances': {'weapons': 0.20, 'armor': 0.10, 'shields': 0.15, 'potions': 0.25},
+                'attacks': [
+                    {'name': 'Bone Blade Strike', 'damage_formula': 'might * 2 + ferocity * 1', 'accuracy_formula': '80 + agility * 2', 'description': 'Slashes with a blade of sharpened bone', 'type': 'special', 'cooldown': 1, 'special_effects': None},
+                    {'name': 'Death Rattle', 'damage_formula': 'mysticism * 2 + cunning * 1', 'accuracy_formula': '90 + mysticism * 1', 'description': 'Emits a chilling rattle that weakens the living', 'type': 'special', 'cooldown': 3, 'special_effects': {'type': 'fear', 'duration': 2, 'effect': 'reduces_player_attack'}}
+                ]
+            },
+            'plague_zombie': {
+                'name': 'Plague Zombie', 'type': 'undead', 'symbol': 'Z', 'color': 'green',
+                'description': 'A rotting corpse seeping with disease, shambling with relentless hunger.',
+                'creature_type': 'brute', 'level': 1,
+                'base_stats': {'might': 9, 'agility': 3, 'cunning': 2, 'vitality': 10, 'ferocity': 7, 'mysticism': 4},
+                'exp_reward': 25,
+                'drop_chances': {'weapons': 0.05, 'armor': 0.20, 'shields': 0.05, 'potions': 0.35},
+                'attacks': [
+                    {'name': 'Infected Bite', 'damage_formula': 'ferocity * 2 + mysticism * 1', 'accuracy_formula': '70 + vitality * 2', 'description': 'Bites with diseased teeth, spreading infection', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'poison', 'duration': 4, 'damage_per_turn_formula': 'mysticism * 2 + 2'}},
+                    {'name': 'Corpse Slam', 'damage_formula': 'might * 2 + vitality * 1', 'accuracy_formula': '65 + might * 1', 'description': 'Slams with the full weight of undeath', 'type': 'special', 'cooldown': 1, 'special_effects': None}
+                ]
+            },
+            'shadow_wraith': {
+                'name': 'Shadow Wraith', 'type': 'undead', 'symbol': 'W', 'color': 'black',
+                'description': 'A being of pure shadow and malice, existing between life and death.',
+                'creature_type': 'caster', 'level': 2,
+                'base_stats': {'might': 4, 'agility': 8, 'cunning': 9, 'vitality': 5, 'ferocity': 6, 'mysticism': 12},
+                'exp_reward': 45,
+                'drop_chances': {'weapons': 0.30, 'armor': 0.15, 'shields': 0.20, 'potions': 0.25},
+                'attacks': [
+                    {'name': 'Shadow Drain', 'damage_formula': 'mysticism * 2 + cunning * 1', 'accuracy_formula': '85 + mysticism * 1', 'description': 'Drains life force through dark magic', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'heal_self', 'amount_formula': 'damage / 2'}},
+                    {'name': 'Phase Strike', 'damage_formula': 'agility * 2 + mysticism * 1', 'accuracy_formula': '90 + agility * 1', 'description': 'Phases through defenses to strike directly', 'type': 'special', 'cooldown': 1, 'special_effects': {'type': 'phase_through_armor', 'effect': 'ignores_defense'}},
+                    {'name': 'Terror Scream', 'damage_formula': 'mysticism * 1 + ferocity * 1', 'accuracy_formula': '95 + cunning * 1', 'description': 'Unleashes a soul-rending scream', 'type': 'special', 'cooldown': 3, 'special_effects': {'type': 'fear', 'duration': 3, 'effect': 'reduces_all_stats'}}
+                ]
+            }
+        },
+        'arcane': {
+            'fire_imp': {
+                'name': 'Fire Imp', 'type': 'arcane', 'symbol': 'i', 'color': 'red',
+                'description': 'A mischievous demon wreathed in flames, crackling with chaotic energy.',
+                'creature_type': 'swarm', 'level': 1,
+                'base_stats': {'might': 3, 'agility': 7, 'cunning': 6, 'vitality': 4, 'ferocity': 8, 'mysticism': 7},
+                'exp_reward': 18,
+                'drop_chances': {'weapons': 0.25, 'armor': 0.10, 'shields': 0.15, 'potions': 0.30},
+                'attacks': [
+                    {'name': 'Flame Bolt', 'damage_formula': 'mysticism * 2 + ferocity * 1', 'accuracy_formula': '80 + cunning * 2', 'description': 'Hurls a searing bolt of hellfire', 'type': 'special', 'cooldown': 1, 'special_effects': {'type': 'burn', 'duration': 3, 'damage_per_turn_formula': 'mysticism / 2 + 2'}},
+                    {'name': 'Chaos Leap', 'damage_formula': 'agility * 2 + ferocity * 1', 'accuracy_formula': '90 + agility * 1', 'description': 'Teleports through hellish flames to strike', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'surprise_attack', 'effect': 'cannot_be_dodged'}}
+                ]
+            },
+            'frost_mage': {
+                'name': 'Frost Mage', 'type': 'arcane', 'symbol': 'M', 'color': 'cyan',
+                'description': 'A spellcaster wielding the power of ice and winter storms.',
+                'creature_type': 'caster', 'level': 2,
+                'base_stats': {'might': 4, 'agility': 7, 'cunning': 11, 'vitality': 6, 'ferocity': 5, 'mysticism': 13},
+                'exp_reward': 35, 'multi_attack': {'chance': 0.25, 'max_attacks': 2},
+                'drop_chances': {'weapons': 0.35, 'armor': 0.25, 'shields': 0.20, 'potions': 0.40},
+                'attacks': [
+                    {'name': 'Ice Shard', 'damage_formula': 'mysticism * 2 + cunning * 1', 'accuracy_formula': '85 + cunning * 1', 'description': 'Launches a piercing shard of ice', 'type': 'special', 'cooldown': 1, 'special_effects': None},
+                    {'name': 'Frost Armor', 'damage_formula': 'mysticism * 1', 'accuracy_formula': '75 + mysticism * 2', 'description': 'Creates armor that slows attackers', 'type': 'special', 'cooldown': 3, 'special_effects': {'type': 'defensive_buff', 'duration': 4, 'effect': 'increases_defense_slows_attackers'}},
+                    {'name': 'Blizzard', 'damage_formula': 'mysticism * 2 + ferocity * 1', 'accuracy_formula': '70 + mysticism * 1', 'description': 'Summons a localized blizzard', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'freeze', 'duration': 2, 'effect': 'reduces_speed_and_accuracy'}}
+                ]
+            },
+            'storm_elemental': {
+                'name': 'Storm Elemental', 'type': 'arcane', 'symbol': 'E', 'color': 'yellow',
+                'description': 'A crackling being of pure lightning and thunder, constantly shifting and sparking.',
+                'creature_type': 'caster', 'level': 2,
+                'base_stats': {'might': 6, 'agility': 9, 'cunning': 7, 'vitality': 7, 'ferocity': 8, 'mysticism': 11},
+                'exp_reward': 50,
+                'drop_chances': {'weapons': 0.30, 'armor': 0.35, 'shields': 0.25, 'potions': 0.30},
+                'attacks': [
+                    {'name': 'Lightning Bolt', 'damage_formula': 'mysticism * 3 + agility * 1', 'accuracy_formula': '75 + mysticism * 1', 'description': 'Strikes with pure electrical energy', 'type': 'special', 'cooldown': 1, 'special_effects': {'type': 'stun', 'duration': 1, 'effect': 'skip_next_turn'}},
+                    {'name': 'Thunder Clap', 'damage_formula': 'mysticism * 2 + ferocity * 1', 'accuracy_formula': '85 + might * 1', 'description': 'Creates a deafening boom of thunder', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'disorient', 'duration': 2, 'effect': 'reduces_accuracy_and_speed'}},
+                    {'name': 'Chain Lightning', 'damage_formula': 'mysticism * 2 + agility * 2', 'accuracy_formula': '90 + agility * 1', 'description': 'Lightning that jumps between targets', 'type': 'special', 'cooldown': 3, 'special_effects': {'type': 'chain_attack', 'effect': 'hits_multiple_times'}}
+                ]
+            }
+        },
+        'beasts': {
+            'dire_wolf': {
+                'name': 'Dire Wolf', 'type': 'beasts', 'symbol': 'w', 'color': 'gray',
+                'description': 'A massive wolf with glowing red eyes and razor-sharp fangs.',
+                'creature_type': 'predator', 'level': 1,
+                'base_stats': {'might': 8, 'agility': 10, 'cunning': 7, 'vitality': 8, 'ferocity': 11, 'mysticism': 2},
+                'exp_reward': 22, 'multi_attack': {'chance': 0.20, 'max_attacks': 2},
+                'drop_chances': {'weapons': 0.15, 'armor': 0.10, 'shields': 0.08, 'potions': 0.18},
+                'attacks': [
+                    {'name': 'Pack Strike', 'damage_formula': 'ferocity * 2 + might * 1', 'accuracy_formula': '80 + agility * 2', 'description': 'Strikes with the fury of the pack', 'type': 'special', 'cooldown': 1, 'special_effects': None},
+                    {'name': 'Savage Bite', 'damage_formula': 'ferocity * 3 + might * 1', 'accuracy_formula': '75 + cunning * 2', 'description': 'Bites with crushing jaws', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'bleed', 'duration': 3, 'damage_per_turn_formula': 'ferocity / 3 + 2'}},
+                    {'name': 'Howl of Fear', 'damage_formula': 'cunning * 1', 'accuracy_formula': '90 + cunning * 2', 'description': 'Lets out a bone-chilling howl', 'type': 'special', 'cooldown': 3, 'special_effects': {'type': 'fear', 'duration': 2, 'effect': 'reduces_player_attack'}}
+                ]
+            },
+            'shadow_panther': {
+                'name': 'Shadow Panther',  
+                'type': 'beasts',
+                'symbol': 'P',
+                'color': 'black',
+                'description': 'A sleek predator that stalks through shadows with deadly grace.',
+                'creature_type': 'predator',
+                'level': 2,
+                'base_stats': {'might': 7, 'agility': 12, 'cunning': 9, 'vitality': 6, 'ferocity': 10, 'mysticism': 4},
+                'exp_reward': 30,
+                'drop_chances': { 'weapons': 0.25, 'armor': 0.15, 'shields': 0.10, 'potions': 0.20 },
+                'attacks': [
+                    {'name': 'Shadow Strike', 'damage_formula': 'agility * 2 + ferocity * 1', 'accuracy_formula': '85 + agility * 1', 'description': 'Strikes from the shadows with deadly precision', 'type': 'special', 'cooldown': 1, 'special_effects': {'type': 'surprise_attack', 'effect': 'cannot_be_blocked'}},
+                    {'name': 'Pounce', 'damage_formula': 'might * 2 + agility * 2', 'accuracy_formula': '75 + agility * 2', 'description': 'Leaps forward with claws extended', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'knockdown', 'duration': 1, 'effect': 'reduces_defense'}}
+                ]
+            },
+            'crystal_dragon': {
+                'name': 'Crystal Dragon', 'type': 'beasts', 'symbol': 'D', 'color': 'magenta',
+                'description': 'A majestic dragon with crystalline scales that refract light into deadly beams.',
+                'creature_type': 'brute', 'level': 3,
+                'base_stats': {'might': 12, 'agility': 6, 'cunning': 10, 'vitality': 14, 'ferocity': 11, 'mysticism': 8},
+                'exp_reward': 120, 'multi_attack': {'chance': 0.45, 'max_attacks': 3},
+                'drop_chances': {'weapons': 0.50, 'armor': 0.45, 'shields': 0.40, 'potions': 0.60},
+                'attacks': [
+                    {'name': 'Crystal Breath', 'damage_formula': 'mysticism * 3 + might * 2', 'accuracy_formula': '80 + cunning * 1', 'description': 'Breathes shards of razor-sharp crystal', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'armor_pierce', 'effect': 'ignores_partial_armor'}},
+                    {'name': 'Dragon Claw', 'damage_formula': 'might * 3 + ferocity * 2', 'accuracy_formula': '85 + might * 1', 'description': 'Slashes with crystalline claws', 'type': 'special', 'cooldown': 1, 'special_effects': {'type': 'deep_wound', 'duration': 3, 'damage_per_turn_formula': 'might / 2 + 3'}},
+                    {'name': 'Prismatic Roar', 'damage_formula': 'mysticism * 2 + cunning * 2', 'accuracy_formula': '90 + mysticism * 1', 'description': 'Roars with the power of refracted light', 'type': 'special', 'cooldown': 3, 'special_effects': {'type': 'blind', 'duration': 2, 'effect': 'greatly_reduces_accuracy'}}
+                ]
+            }
+        },
+        'constructs': {
+            'iron_sentinel': {
+                'name': 'Iron Sentinel', 'type': 'constructs', 'symbol': 'S', 'color': 'gray',
+                'description': 'A towering construct of iron and steel, built to guard ancient secrets.',
+                'creature_type': 'tank', 'level': 2,
+                'base_stats': {'might': 10, 'agility': 3, 'cunning': 4, 'vitality': 12, 'ferocity': 6, 'mysticism': 5},
+                'exp_reward': 40,
+                'drop_chances': {'weapons': 0.20, 'armor': 0.40, 'shields': 0.35, 'potions': 0.15},
+                'attacks': [
+                    {'name': 'Iron Fist', 'damage_formula': 'might * 3 + vitality * 1', 'accuracy_formula': '70 + might * 1', 'description': 'Pounds with massive metal fists', 'type': 'special', 'cooldown': 1, 'special_effects': {'type': 'armor_break', 'duration': 2, 'effect': 'reduces_defense'}},
+                    {'name': 'Guard Stance', 'damage_formula': 'vitality * 1', 'accuracy_formula': '85 + vitality * 2', 'description': 'Takes a defensive position and counterattacks', 'type': 'special', 'cooldown': 3, 'special_effects': {'type': 'defensive_counter', 'duration': 2, 'effect': 'increases_defense_counters_attacks'}}
+                ]
+            },
+            'war_golem': {
+                'name': 'War Golem', 'type': 'constructs', 'symbol': 'G', 'color': 'brown',
+                'description': 'A massive stone golem carved with ancient runes of war and destruction.',
+                'creature_type': 'brute', 'level': 3,
+                'base_stats': {'might': 14, 'agility': 2, 'cunning': 6, 'vitality': 16, 'ferocity': 8, 'mysticism': 7},
+                'exp_reward': 70, 'multi_attack': {'chance': 0.30, 'max_attacks': 2},
+                'drop_chances': {'weapons': 0.15, 'armor': 0.50, 'shields': 0.40, 'potions': 0.10},
+                'attacks': [
+                    {'name': 'Earthshaker', 'damage_formula': 'might * 3 + vitality * 2', 'accuracy_formula': '75 + might * 1', 'description': 'Pounds the ground with tremendous force', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'tremor', 'duration': 2, 'effect': 'reduces_accuracy_and_speed'}},
+                    {'name': 'Rune Blast', 'damage_formula': 'mysticism * 3 + cunning * 2', 'accuracy_formula': '80 + mysticism * 1', 'description': 'Ancient runes flare with magical energy', 'type': 'special', 'cooldown': 3, 'special_effects': {'type': 'magic_damage', 'effect': 'ignores_all_armor'}}
+                ]
+            }
+        },
+        'abyssal': {
+            'void_stalker': {
+                'name': 'Void Stalker', 'type': 'abyssal', 'symbol': 'V', 'color': 'black',
+                'description': 'A creature from the void between worlds, existing partially outside reality.',
+                'creature_type': 'swarm', 'level': 2,
+                'base_stats': {'might': 5, 'agility': 11, 'cunning': 8, 'vitality': 5, 'ferocity': 9, 'mysticism': 10},
+                'exp_reward': 35,
+                'drop_chances': {'weapons': 0.30, 'armor': 0.20, 'shields': 0.25, 'potions': 0.35},
+                'attacks': [
+                    {'name': 'Void Slash', 'damage_formula': 'mysticism * 2 + agility * 1', 'accuracy_formula': '85 + agility * 1', 'description': 'Slashes with claws that cut through reality', 'type': 'special', 'cooldown': 1, 'special_effects': {'type': 'void_damage', 'effect': 'ignores_partial_armor'}},
+                    {'name': 'Phase Step', 'damage_formula': 'agility * 2 + cunning * 1', 'accuracy_formula': '90 + mysticism * 1', 'description': 'Steps through dimensions to strike', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'dimensional_strike', 'effect': 'cannot_be_blocked_or_dodged'}}
+                ]
+            },
+                        'chaos_spawn': {
+                'name': 'Chaos Spawn', 'type': 'abyssal', 'symbol': 'C', 'color': 'magenta',
+                'description': 'A twisted amalgamation of flesh and magic, constantly shifting form.',
+                'creature_type': 'caster', 'level': 3,
+                'base_stats': {'might': 7, 'agility': 6, 'cunning': 9, 'vitality': 8, 'ferocity': 10, 'mysticism': 12},
+                'exp_reward': 55,
+                'drop_chances': {'weapons': 0.35, 'armor': 0.30, 'shields': 0.20, 'potions': 0.40},
+                'attacks': [
+                    {'name': 'Chaos Bolt', 'damage_formula': 'mysticism * 2 + cunning * 1', 'accuracy_formula': '80 + mysticism * 1', 'description': 'Hurls unpredictable magical energy', 'type': 'magical', 'cooldown': 0},
+                    {'name': 'Reality Warp', 'damage_formula': 'mysticism * 3 + ferocity * 1', 'accuracy_formula': '75 + cunning * 2', 'description': 'Warps reality to inflict chaotic damage', 'type': 'special', 'cooldown': 3, 'special_effects': {'type': 'chaos_damage', 'effect': 'random_damage_type'}}
+                ]
+            }
+        }
+    }
+
     @classmethod
     def get_all_categories(cls):
         """Get all available monster categories"""
@@ -1329,7 +368,14 @@ class MonsterDatabase:
         valid_monsters = []
         for category, monsters in cls.MONSTERS.items():
             for monster_type, data in monsters.items():
-                exp_reward = data['stats']['exp_reward']
+                # Check both new and legacy stat formats
+                if 'legacy_stats' in data:
+                    exp_reward = data['legacy_stats']['exp_reward']
+                elif 'stats' in data:
+                    exp_reward = data['stats']['exp_reward']
+                else:
+                    exp_reward = 10  # Default fallback
+                    
                 if min_exp <= exp_reward <= max_exp:
                     valid_monsters.append((category, monster_type))
         
@@ -1355,7 +401,14 @@ class MonsterDatabase:
         
         for category, monster_dict in cls.MONSTERS.items():
             for monster_type, data in monster_dict.items():
-                exp_reward = data['stats']['exp_reward']
+                # Check both new and legacy stat formats
+                if 'legacy_stats' in data:
+                    exp_reward = data['legacy_stats']['exp_reward']
+                elif 'stats' in data:
+                    exp_reward = data['stats']['exp_reward']
+                else:
+                    exp_reward = 10  # Default fallback
+                    
                 if min_exp <= exp_reward <= max_exp:
                     monsters.append((category, monster_type))
         

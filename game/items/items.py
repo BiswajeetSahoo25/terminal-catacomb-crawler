@@ -240,13 +240,15 @@ class Equipment:
         
     def get_total_stat_bonuses(self):
         """Get total stat bonuses from all equipped items"""
-        total_bonuses = {
-            'attack': 0,
-            'defense': 0,
-            'speed': 0,
-            'hp': 0
-        }
+        # Import here to avoid circular imports
+        from ..player.player_database import PlayerDatabase
         
+        # Initialize all possible stats to 0
+        total_bonuses = {}
+        for stat_name in PlayerDatabase.get_all_stat_names():
+            total_bonuses[stat_name] = 0
+        
+        # Add bonuses from all equipped items  
         for item in self.get_equipped_items().values():
             for stat, bonus in item.stats.items():
                 if stat in total_bonuses:
