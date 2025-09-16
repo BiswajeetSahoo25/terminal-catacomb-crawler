@@ -9,6 +9,7 @@ from .level import Level
 from .ui import UI
 from .enemy import EnemyManager
 from .combat import CombatManager, COMBAT_ACTIONS
+from .character_creation import CharacterCreator
 
 class GameEngine:
     """Main game engine that handles the core game loop"""
@@ -22,6 +23,7 @@ class GameEngine:
         self.enemy_manager = None
         self.combat_manager = CombatManager()
         self.combat_messages = []
+        self.character_creator = None
         
         # Combat tracking
         self.combat_stats = {
@@ -34,9 +36,19 @@ class GameEngine:
         
     def initialize(self):
         """Initialize game components"""
-        # Create game objects
-        self.player = Player(x=5, y=5)  # Starting position
-        self.level = Level(width=60, height=30)  # Made level bigger too
+        # Create character creator
+        self.character_creator = CharacterCreator(self.terminal)
+        
+        # Create player and run character creation
+        self.player = Player(x=5, y=5)
+        
+        # Run character creation process
+        if not self.character_creator.create_character(self.player):
+            print("Character creation cancelled. Exiting...")
+            return False
+        
+        # Create other game objects
+        self.level = Level(width=60, height=30)
         self.ui = UI(self.terminal)
         self.enemy_manager = EnemyManager()
         
@@ -52,13 +64,18 @@ class GameEngine:
         self.spawn_initial_enemies()
         
         print("Game initialized successfully!")
-        time.sleep(1)  # Brief pause
+        time.sleep(1)
+        return True
         
     def run(self):
         """Main game loop"""
         self.running = True
-        self.initialize()
-        self.needs_render = True  # Flag to control when to render
+        
+        # Initialize game - if it fails, exit
+        if not self.initialize():
+            return
+            
+        self.needs_render = True
         
         with self.terminal.cbreak(), self.terminal.hidden_cursor():
             while self.running:
@@ -97,7 +114,11 @@ class GameEngine:
             self.running = False
             return
         elif key.lower() == 'i':
-            self.ui.show_inventory(self.player)
+            self.show_inventory()
+            self.needs_render = True
+            return
+        elif key.lower() == 'c':  # Character stats
+            self.show_character_stats()
             self.needs_render = True
             return
             
@@ -153,6 +174,246 @@ class GameEngine:
         # Future: More combat actions
         # elif key.lower() == 'h':  # Heal/use item
         # elif key.lower() == 's':  # Cast spell
+            
+    def show_inventory(self):
+        """Show enhanced inventory with item management"""
+        while True:  # Keep inventory open until user explicitly exits
+            print(self.terminal.clear)
+            print(self.terminal.bold + "=== INVENTORY ===" + self.terminal.normal)
+            print()
+            
+            if not self.player.inventory:
+                print("Your inventory is empty.")
+                print()
+            else:
+                print("Items in your inventory:")
+                print()
+                
+                for i, item in enumerate(self.player.inventory, 1):
+                    # Show item with quality color and equipment status
+                    quality_info = item.get_quality_info()
+                    equipped_text = f" {self.terminal.green}[EQUIPPED]{self.terminal.normal}" if item.equipped else ""
+                    
+                    print(f"{i}. {item.symbol} {self.terminal.bold}{item.name}{self.terminal.normal}{equipped_text}")
+                    print(f"   Type: {item.type.title()} | Quality: {quality_info['name']}")
+                    print(f"   {item.description}")
+                    
+                    # Show stats
+                    stat_parts = []
+                    for stat, value in item.stats.items():
+                        if value != 0:
+                            sign = "+" if value > 0 else ""
+                            color = self.terminal.green if value > 0 else self.terminal.red
+                            stat_parts.append(f"{stat.upper()}: {color}{sign}{value}{self.terminal.normal}")
+                    
+                    if stat_parts:
+                        print(f"   Stats: {' | '.join(stat_parts)}")
+                    print()
+            
+            # Show equipped items summary
+            equipped = self.player.equipment.get_equipped_items()
+            if equipped:
+                print(self.terminal.bold + "Currently Equipped:" + self.terminal.normal)
+                for slot, item in equipped.items():
+                    print(f"  {slot.replace('_', ' ').title()}: {self.terminal.yellow}{item.name}{self.terminal.normal}")
+                print()
+            
+            print(self.terminal.bold + "Commands:" + self.terminal.normal)
+            print("E = Equip/Unequip item")
+            print("U = Use item") 
+            print("Any other key = Back to game")
+            print()
+            print("Choose an action: ", end="", flush=True)
+            
+            key = self.terminal.inkey()
+            print(key)  # Show what key was pressed
+            
+            if key.lower() == 'e':
+                self.handle_equip_unequip()
+                # Continue the loop to stay in inventory
+            elif key.lower() == 'u':
+                self.handle_use_item()
+                # Continue the loop to stay in inventory
+            else:
+                print("Returning to game...")
+                break
+                
+    def show_character_stats(self):
+        """Show detailed character statistics"""
+        print(self.terminal.clear)
+        print(self.terminal.bold + "=== CHARACTER STATS ===" + self.terminal.normal)
+        print()
+        
+        stats = self.player.get_stats()
+        detailed = self.player.get_detailed_stats()
+        
+        print(f"Name: {self.terminal.bold}{stats['name']}{self.terminal.normal}")
+        print(f"Level: {stats['level']} (XP: {stats['exp']}/{stats['exp_to_next']})")
+        print()
+        
+        print("Current Stats (Base + Equipment):")
+        base = detailed['base_stats']
+        bonuses = detailed['equipment_bonuses']
+        total = detailed['total_stats']
+        
+        for stat_name in ['hp', 'attack', 'defense', 'speed']:
+            base_val = base[stat_name]
+            bonus_val = bonuses[stat_name]
+            total_val = total[stat_name]
+            
+            if bonus_val != 0:
+                sign = "+" if bonus_val > 0 else ""
+                color = self.terminal.green if bonus_val > 0 else self.terminal.red
+                print(f"  {stat_name.upper()}: {total_val} ({base_val} {color}{sign}{bonus_val}{self.terminal.normal})")
+            else:
+                print(f"  {stat_name.upper()}: {total_val}")
+                
+        print(f"  Current HP: {stats['hp']}/{stats['max_hp']}")
+        print()
+        
+        # Show equipment bonuses breakdown
+        equipped = self.player.equipment.get_equipped_items()
+        if equipped:
+            print("Equipment Bonuses:")
+            for slot, item in equipped.items():
+                stat_parts = []
+                for stat, value in item.stats.items():
+                    if value != 0:
+                        sign = "+" if value > 0 else ""
+                        stat_parts.append(f"{stat.upper()}: {sign}{value}")
+                
+                bonus_text = " | ".join(stat_parts) if stat_parts else "No bonuses"
+                print(f"  {item.name}: {bonus_text}")
+        
+        print()
+        print("Press any key to continue...")
+        self.terminal.inkey()
+        
+    def handle_equip_unequip(self):
+        """Handle equipping/unequipping items"""
+        if not self.player.inventory:
+            print("No items to equip!")
+            print("Press any key to continue...")
+            self.terminal.inkey()
+            return
+            
+        while True:
+            print(f"\nSelect item number to equip/unequip (1-{len(self.player.inventory)}) or 0 to cancel: ", end="", flush=True)
+            
+            # Use terminal.inkey() to get visible input character by character
+            choice_str = ""
+            while True:
+                key = self.terminal.inkey()
+                
+                # Handle backspace
+                if key.name == 'KEY_BACKSPACE' and choice_str:
+                    choice_str = choice_str[:-1]
+                    print('\b \b', end="", flush=True)  # Clear last character
+                # Handle enter
+                elif key.name == 'KEY_ENTER' or key == '\r' or key == '\n':
+                    break
+                # Handle escape or cancel
+                elif key.name == 'KEY_ESCAPE' or key.lower() == 'q':
+                    print("0")  # Show cancellation
+                    choice_str = "0"
+                    break
+                # Handle digits
+                elif key.isdigit():
+                    choice_str += key
+                    print(key, end="", flush=True)  # Show the digit
+                    
+            print()  # New line after input
+            
+            try:
+                choice = int(choice_str) if choice_str else 0
+                
+                if choice == 0:
+                    print("Cancelled.")
+                    break
+                elif 1 <= choice <= len(self.player.inventory):
+                    item = self.player.inventory[choice - 1]
+                    print(f"Selected: {item.name}")
+                    
+                    if item.equipped:
+                        success, message = self.player.unequip_item(item)
+                    else:
+                        success, message = self.player.equip_item(item)
+                        
+                    print(f"{message}")
+                    print("Press any key to continue...")
+                    self.terminal.inkey()
+                    break
+                else:
+                    print(f"Please enter a number between 1 and {len(self.player.inventory)}, or 0 to cancel.")
+                    print("Try again...")
+                    
+            except ValueError:
+                if choice_str:
+                    print(f"'{choice_str}' is not a valid number!")
+                else:
+                    print("Please enter a number!")
+                print("Try again...")
+            
+    def handle_use_item(self):
+        """Handle using/consuming items"""
+        if not self.player.inventory:
+            print("No items to use!")
+            print("Press any key to continue...")
+            self.terminal.inkey()
+            return
+            
+        while True:
+            print(f"\nSelect item number to use (1-{len(self.player.inventory)}) or 0 to cancel: ", end="", flush=True)
+            
+            # Use terminal.inkey() for visible input
+            choice_str = ""
+            while True:
+                key = self.terminal.inkey()
+                
+                # Handle backspace
+                if key.name == 'KEY_BACKSPACE' and choice_str:
+                    choice_str = choice_str[:-1]
+                    print('\b \b', end="", flush=True)
+                # Handle enter
+                elif key.name == 'KEY_ENTER' or key == '\r' or key == '\n':
+                    break
+                # Handle escape or cancel
+                elif key.name == 'KEY_ESCAPE' or key.lower() == 'q':
+                    print("0")
+                    choice_str = "0"
+                    break
+                # Handle digits
+                elif key.isdigit():
+                    choice_str += key
+                    print(key, end="", flush=True)
+                    
+            print()  # New line after input
+            
+            try:
+                choice = int(choice_str) if choice_str else 0
+                
+                if choice == 0:
+                    print("Cancelled.")
+                    break
+                elif 1 <= choice <= len(self.player.inventory):
+                    item = self.player.inventory[choice - 1]
+                    print(f"Selected: {item.name}")
+                    
+                    success, message = self.player.use_item(item)
+                    print(f"{message}")
+                    print("Press any key to continue...")
+                    self.terminal.inkey()
+                    break
+                else:
+                    print(f"Please enter a number between 1 and {len(self.player.inventory)}, or 0 to cancel.")
+                    print("Try again...")
+                    
+            except ValueError:
+                if choice_str:
+                    print(f"'{choice_str}' is not a valid number!")
+                else:
+                    print("Please enter a number!")
+                print("Try again...")
             
     def can_move_to(self, x, y):
         """Check if the player can move to the given position"""
@@ -235,6 +496,14 @@ class GameEngine:
         print(self.terminal.clear)
         print(self.terminal.red + self.terminal.bold + "GAME OVER" + self.terminal.normal)
         print(f"You reached level {self.player.level}")
+        
+        # Show final stats
+        equipped = self.player.equipment.get_equipped_items()
+        if equipped:
+            print("\nFinal Equipment:")
+            for slot, item in equipped.items():
+                print(f"  {slot.replace('_', ' ').title()}: {item.name}")
+        
         print("Press any key to exit...")
         self.terminal.inkey()
         self.running = False

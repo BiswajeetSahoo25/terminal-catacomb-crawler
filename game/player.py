@@ -1,8 +1,15 @@
 """
 Player Character - Handles player stats, inventory, and actions
 """
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'items'))
+
+from items.items import Equipment
 
 class Player:
+    """Player character class"""
+    
     """Player character class"""
     
     def __init__(self, x=0, y=0):
@@ -10,12 +17,20 @@ class Player:
         self.x = x
         self.y = y
         
-        # Stats
-        self.max_hp = 100
+        # Base stats (before equipment bonuses)
+        self.base_max_hp = 100
+        self.base_attack = 10
+        self.base_defense = 5
+        self.base_speed = 12
+        
+        # Current stats (including equipment bonuses)
+        self.max_hp = self.base_max_hp
         self.hp = self.max_hp
-        self.attack = 10
-        self.defense = 5
-        self.speed = 12  # For initiative in combat
+        self.attack = self.base_attack
+        self.defense = self.base_defense
+        self.speed = self.base_speed
+        
+        # Character progression
         self.level = 1
         self.exp = 0
         self.exp_to_next = 100
@@ -24,14 +39,42 @@ class Player:
         self.symbol = '@'
         self.name = "Hero"
         
-        # Inventory
+        # Inventory and Equipment
         self.inventory = []
         self.max_inventory = 20
+        self.equipment = Equipment()
         
-        # Equipment (for later)
-        self.weapon = None
-        self.armor = None
+        # Starting item (will be selected during character creation)
+        self.starting_item = None
+
+    def set_starting_item(self, item):
+        """Set the player's starting item and equip it"""
+        self.starting_item = item
+        self.add_item(item)
         
+        # Auto-equip the starting item
+        success, message = self.equipment.equip_item(item, self)
+        return success, message
+
+    def recalculate_stats(self):
+        """Recalculate all stats based on base stats + equipment"""
+        # Reset to base stats
+        self.max_hp = self.base_max_hp
+        self.attack = self.base_attack
+        self.defense = self.base_defense
+        self.speed = self.base_speed
+        
+        # Apply equipment bonuses
+        bonuses = self.equipment.get_total_stat_bonuses()
+        self.max_hp += bonuses['hp']
+        self.attack += bonuses['attack']
+        self.defense += bonuses['defense']
+        self.speed += bonuses['speed']
+        
+        # Ensure HP doesn't exceed max
+        if self.hp > self.max_hp:
+            self.hp = self.max_hp
+
     def move(self, new_x, new_y):
         """Move player to new position"""
         self.x = new_x
@@ -69,19 +112,27 @@ class Player:
         self.exp -= self.exp_to_next
         self.exp_to_next = int(self.exp_to_next * 1.5)
         
-        # Increase stats
-        self.max_hp += 20
-        self.hp = self.max_hp
-        self.attack += 3
-        self.defense += 2
-        self.speed += 1  # Slightly faster each level
+        # Increase base stats
+        self.base_max_hp += 20
+        self.base_attack += 3
+        self.base_defense += 2
+        self.base_speed += 1
+        
+        # Recalculate current stats with equipment
+        old_hp_percent = self.hp / self.max_hp if self.max_hp > 0 else 1
+        self.recalculate_stats()
+        
+        # Restore HP percentage after level up
+        self.hp = int(self.max_hp * old_hp_percent)
+        if self.hp < self.max_hp:
+            self.hp = self.max_hp
         
     def attack_enemy(self, enemy):
         """Attack an enemy"""
         import random
         
-        damage = self.attack + random.randint(-2, 3)  # Add some randomness
-        damage = max(1, damage)  # Minimum 1 damage
+        damage = self.attack + random.randint(-2, 3)
+        damage = max(1, damage)
         
         enemy_died = enemy.take_damage(damage)
         
@@ -104,6 +155,43 @@ class Player:
             return True
         return False  # Inventory full
         
+    def remove_item(self, item):
+        """Remove item from inventory"""
+        if item in self.inventory:
+            self.inventory.remove(item)
+            return True
+        return False
+        
+    def equip_item(self, item):
+        """Equip an item"""
+        if item not in self.inventory:
+            return False, "Item not in inventory"
+            
+        success, message = self.equipment.equip_item(item, self)
+        if success:
+            self.recalculate_stats()
+        return success, message
+        
+    def unequip_item(self, item):
+        """Unequip an item"""
+        success, message = self.equipment.unequip_item(item, self)
+        if success:
+            self.recalculate_stats()
+        return success, message
+        
+    def use_item(self, item):
+        """Use/consume an item"""
+        if item not in self.inventory:
+            return False, "Item not in inventory"
+            
+        result = item.use_item(self)
+        if result:
+            # Remove consumable items after use
+            if item.type == 'consumable':
+                self.remove_item(item)
+            return True, result
+        return False, "Cannot use this item"
+        
     def get_stats(self):
         """Get formatted player stats"""
         return {
@@ -113,7 +201,42 @@ class Player:
             'max_hp': self.max_hp,
             'attack': self.attack,
             'defense': self.defense,
+            'speed': self.speed,
             'exp': self.exp,
             'exp_to_next': self.exp_to_next,
             'position': (self.x, self.y)
         }
+        
+    def get_detailed_stats(self):
+        """Get detailed stats including base and equipment bonuses"""
+        equipment_bonuses = self.equipment.get_total_stat_bonuses()
+        
+        return {
+            'base_stats': {
+                'hp': self.base_max_hp,
+                'attack': self.base_attack,
+                'defense': self.base_defense,
+                'speed': self.base_speed
+            },
+            'equipment_bonuses': equipment_bonuses,
+            'total_stats': {
+                'hp': self.max_hp,
+                'attack': self.attack,
+                'defense': self.defense,
+                'speed': self.speed
+            }
+        }
+        
+    def get_equipped_items_summary(self):
+        """Get a summary of equipped items"""
+        equipped = self.equipment.get_equipped_items()
+        summary = {}
+        
+        for slot, item in equipped.items():
+            summary[slot] = {
+                'name': item.name,
+                'stats': item.stats,
+                'quality': item.quality
+            }
+            
+        return summary
