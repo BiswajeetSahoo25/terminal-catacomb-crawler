@@ -45,6 +45,7 @@ class Monster:
         self.symbol = self.data['symbol']
         self.color = self.data['color']
         self.description = self.data['description']
+        self.level = self.data.get('level', 1)  # Monster level for experience multipliers
         
         # Check if monster uses new stats system
         if 'base_stats' in self.data and 'creature_type' in self.data:
@@ -64,9 +65,12 @@ class Monster:
             self.speed = calculated_stats['speed']
             self.accuracy = calculated_stats['accuracy'] / 100.0  # Convert to decimal
             
-            # Legacy stats
-            legacy = self.data.get('legacy_stats', {})
-            self.exp_reward = legacy.get('exp_reward', 10)
+            # Experience reward - check both new format and legacy format
+            if 'exp_reward' in self.data:
+                self.exp_reward = self.data['exp_reward']
+            else:
+                legacy = self.data.get('legacy_stats', {})
+                self.exp_reward = legacy.get('exp_reward', 10)
             
             # Store main stats for reference
             self.main_stats = self.data['base_stats'].copy()
@@ -469,6 +473,29 @@ class MonsterManager:
         
         import random
         monster_type = random.choice(available_types)
+        return self.spawn_monster(x, y, category, monster_type)
+    
+    def spawn_monster_by_level(self, x, y, player_level):
+        """Spawn a monster appropriate for the player's level
+        
+        Args:
+            x, y: Position to spawn monster
+            player_level: Player's current level
+            
+        Spawns:
+            80% chance: monster at player's level
+            20% chance: monster one level above player
+        """
+        import random
+        
+        # Determine target monster level
+        if random.random() < 0.8:  # 80% chance
+            target_level = player_level
+        else:  # 20% chance
+            target_level = player_level + 1
+        
+        # Get monsters at the target level
+        category, monster_type = MonsterDatabase.get_random_monster_by_level(target_level)
         return self.spawn_monster(x, y, category, monster_type)
 
 

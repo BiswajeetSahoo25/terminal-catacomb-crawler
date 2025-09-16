@@ -171,8 +171,8 @@ class MonsterDatabase:
                 'name': 'Skeleton Warrior', 'type': 'undead', 'symbol': 'S', 'color': 'white',
                 'description': 'An undead warrior wielding ancient weapons, bones clicking with each movement.',
                 'creature_type': 'undead', 'level': 1,
-                'base_stats': {'might': 7, 'agility': 6, 'cunning': 4, 'vitality': 6, 'ferocity': 7, 'mysticism': 5},
-                'exp_reward': 20,
+                'base_stats': {'might': 4, 'agility': 6, 'cunning': 4, 'vitality': 6, 'ferocity': 7, 'mysticism': 5},
+                'exp_reward': 25,
                 'drop_chances': {'weapons': 0.20, 'armor': 0.10, 'shields': 0.15, 'potions': 0.25},
                 'attacks': [
                     {'name': 'Bone Blade Strike', 'damage_formula': 'might * 2 + ferocity * 1', 'accuracy_formula': '80 + agility * 2', 'description': 'Slashes with a blade of sharpened bone', 'type': 'special', 'cooldown': 1, 'special_effects': None},
@@ -183,8 +183,8 @@ class MonsterDatabase:
                 'name': 'Plague Zombie', 'type': 'undead', 'symbol': 'Z', 'color': 'green',
                 'description': 'A rotting corpse seeping with disease, shambling with relentless hunger.',
                 'creature_type': 'brute', 'level': 1,
-                'base_stats': {'might': 9, 'agility': 3, 'cunning': 2, 'vitality': 10, 'ferocity': 7, 'mysticism': 4},
-                'exp_reward': 25,
+                'base_stats': {'might': 7, 'agility': 2, 'cunning': 2, 'vitality': 8, 'ferocity': 6, 'mysticism': 4},
+                'exp_reward': 30,
                 'drop_chances': {'weapons': 0.05, 'armor': 0.20, 'shields': 0.05, 'potions': 0.35},
                 'attacks': [
                     {'name': 'Infected Bite', 'damage_formula': 'ferocity * 2 + mysticism * 1', 'accuracy_formula': '70 + vitality * 2', 'description': 'Bites with diseased teeth, spreading infection', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'poison', 'duration': 4, 'damage_per_turn_formula': 'mysticism * 2 + 2'}},
@@ -211,11 +211,24 @@ class MonsterDatabase:
                 'description': 'A mischievous demon wreathed in flames, crackling with chaotic energy.',
                 'creature_type': 'swarm', 'level': 1,
                 'base_stats': {'might': 3, 'agility': 7, 'cunning': 6, 'vitality': 4, 'ferocity': 8, 'mysticism': 7},
-                'exp_reward': 18,
+                'exp_reward': 23,
                 'drop_chances': {'weapons': 0.25, 'armor': 0.10, 'shields': 0.15, 'potions': 0.30},
                 'attacks': [
                     {'name': 'Flame Bolt', 'damage_formula': 'mysticism * 2 + ferocity * 1', 'accuracy_formula': '80 + cunning * 2', 'description': 'Hurls a searing bolt of hellfire', 'type': 'special', 'cooldown': 1, 'special_effects': {'type': 'burn', 'duration': 3, 'damage_per_turn_formula': 'mysticism / 2 + 2'}},
                     {'name': 'Chaos Leap', 'damage_formula': 'agility * 2 + ferocity * 1', 'accuracy_formula': '90 + agility * 1', 'description': 'Teleports through hellish flames to strike', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'surprise_attack', 'effect': 'cannot_be_dodged'}}
+                ]
+            },
+            'lightning_elemental': {
+                'name': 'Lightning Elemental', 'type': 'arcane', 'symbol': 'E', 'color': 'yellow',
+                'description': 'A being of pure electrical energy, crackling with raw power and unpredictable fury.',
+                'creature_type': 'caster', 'level': 2,
+                'base_stats': {'might': 4, 'agility': 10, 'cunning': 8, 'vitality': 6, 'ferocity': 7, 'mysticism': 11},
+                'exp_reward': 42,
+                'drop_chances': {'weapons': 0.35, 'armor': 0.15, 'shields': 0.20, 'potions': 0.30},
+                'attacks': [
+                    {'name': 'Lightning Bolt', 'damage_formula': 'mysticism * 3 + agility * 1', 'accuracy_formula': '90 + mysticism * 1', 'description': 'Hurls a devastating bolt of pure lightning', 'type': 'special', 'cooldown': 1, 'special_effects': {'type': 'shock', 'duration': 2, 'effect': 'reduces_speed_and_accuracy'}},
+                    {'name': 'Chain Lightning', 'damage_formula': 'mysticism * 2 + cunning * 2', 'accuracy_formula': '85 + mysticism * 2', 'description': 'Electricity arcs between multiple targets', 'type': 'special', 'cooldown': 3, 'special_effects': {'type': 'chain_damage', 'effect': 'damages_nearby_enemies'}},
+                    {'name': 'Static Field', 'damage_formula': 'mysticism * 1 + cunning * 1', 'accuracy_formula': '95 + mysticism * 1', 'description': 'Creates a field of crackling energy', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'static_field', 'duration': 3, 'damage_per_turn_formula': 'mysticism / 2 + 2'}}
                 ]
             },
             'frost_mage': {
@@ -250,13 +263,25 @@ class MonsterDatabase:
                 'name': 'Dire Wolf', 'type': 'beasts', 'symbol': 'w', 'color': 'gray',
                 'description': 'A massive wolf with glowing red eyes and razor-sharp fangs.',
                 'creature_type': 'predator', 'level': 1,
-                'base_stats': {'might': 8, 'agility': 10, 'cunning': 7, 'vitality': 8, 'ferocity': 11, 'mysticism': 2},
-                'exp_reward': 22, 'multi_attack': {'chance': 0.20, 'max_attacks': 2},
+                'base_stats': {'might': 5, 'agility': 4, 'cunning': 7, 'vitality': 8, 'ferocity': 11, 'mysticism': 2},
+                'exp_reward': 32, 'multi_attack': {'chance': 0.20, 'max_attacks': 2},
                 'drop_chances': {'weapons': 0.15, 'armor': 0.10, 'shields': 0.08, 'potions': 0.18},
                 'attacks': [
                     {'name': 'Pack Strike', 'damage_formula': 'ferocity * 2 + might * 1', 'accuracy_formula': '80 + agility * 2', 'description': 'Strikes with the fury of the pack', 'type': 'special', 'cooldown': 1, 'special_effects': None},
                     {'name': 'Savage Bite', 'damage_formula': 'ferocity * 3 + might * 1', 'accuracy_formula': '75 + cunning * 2', 'description': 'Bites with crushing jaws', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'bleed', 'duration': 3, 'damage_per_turn_formula': 'ferocity / 3 + 2'}},
                     {'name': 'Howl of Fear', 'damage_formula': 'cunning * 1', 'accuracy_formula': '90 + cunning * 2', 'description': 'Lets out a bone-chilling howl', 'type': 'special', 'cooldown': 3, 'special_effects': {'type': 'fear', 'duration': 2, 'effect': 'reduces_player_attack'}}
+                ]
+            },
+            'cave_spider': {
+                'name': 'Cave Spider', 'type': 'beasts', 'symbol': 's', 'color': 'green',
+                'description': 'A large venomous spider that lurks in dark corners, spinning webs of death.',
+                'creature_type': 'swarm', 'level': 1,
+                'base_stats': {'might': 3, 'agility': 8, 'cunning': 6, 'vitality': 4, 'ferocity': 5, 'mysticism': 7},
+                'exp_reward': 28,
+                'drop_chances': {'weapons': 0.10, 'armor': 0.05, 'shields': 0.08, 'potions': 0.40},
+                'attacks': [
+                    {'name': 'Poison Bite', 'damage_formula': 'ferocity * 2 + mysticism * 1', 'accuracy_formula': '85 + agility * 2', 'description': 'Bites with venomous fangs', 'type': 'special', 'cooldown': 1, 'special_effects': {'type': 'poison', 'duration': 4, 'damage_per_turn_formula': 'mysticism * 1 + 3'}},
+                    {'name': 'Web Trap', 'damage_formula': 'cunning * 1', 'accuracy_formula': '90 + cunning * 2', 'description': 'Shoots sticky webbing to entangle prey', 'type': 'special', 'cooldown': 3, 'special_effects': {'type': 'entangle', 'duration': 2, 'effect': 'reduces_speed_and_dodge'}}
                 ]
             },
             'shadow_panther': {
@@ -290,6 +315,18 @@ class MonsterDatabase:
             }
         },
         'constructs': {
+            'animated_armor': {
+                'name': 'Animated Armor', 'type': 'constructs', 'symbol': 'A', 'color': 'cyan',
+                'description': 'An empty suit of armor brought to life by ancient magic, clanking with each step.',
+                'creature_type': 'tank', 'level': 1,
+                'base_stats': {'might': 6, 'agility': 3, 'cunning': 2, 'vitality': 9, 'ferocity': 4, 'mysticism': 4},
+                'exp_reward': 26,
+                'drop_chances': {'weapons': 0.15, 'armor': 0.45, 'shields': 0.25, 'potions': 0.10},
+                'attacks': [
+                    {'name': 'Armored Strike', 'damage_formula': 'might * 2 + vitality * 1', 'accuracy_formula': '75 + might * 1', 'description': 'Strikes with heavy gauntlets', 'type': 'special', 'cooldown': 1, 'special_effects': None},
+                    {'name': 'Shield Bash', 'damage_formula': 'vitality * 2 + might * 1', 'accuracy_formula': '80 + vitality * 1', 'description': 'Bashes with a spectral shield', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'stun', 'duration': 1, 'effect': 'skips_next_turn'}}
+                ]
+            },
             'iron_sentinel': {
                 'name': 'Iron Sentinel', 'type': 'constructs', 'symbol': 'S', 'color': 'gray',
                 'description': 'A towering construct of iron and steel, built to guard ancient secrets.',
@@ -338,6 +375,33 @@ class MonsterDatabase:
                 'attacks': [
                     {'name': 'Chaos Bolt', 'damage_formula': 'mysticism * 2 + cunning * 1', 'accuracy_formula': '80 + mysticism * 1', 'description': 'Hurls unpredictable magical energy', 'type': 'magical', 'cooldown': 0},
                     {'name': 'Reality Warp', 'damage_formula': 'mysticism * 3 + ferocity * 1', 'accuracy_formula': '75 + cunning * 2', 'description': 'Warps reality to inflict chaotic damage', 'type': 'special', 'cooldown': 3, 'special_effects': {'type': 'chaos_damage', 'effect': 'random_damage_type'}}
+                ]
+            }
+        },
+        'humanoid': {
+            'goblin_raider': {
+                'name': 'Goblin Raider', 'type': 'humanoid', 'symbol': 'g', 'color': 'green',
+                'description': 'A small but vicious goblin wielding crude weapons and a savage grin.',
+                'creature_type': 'swarm', 'level': 1,
+                'base_stats': {'might': 4, 'agility': 7, 'cunning': 6, 'vitality': 5, 'ferocity': 8, 'mysticism': 3},
+                'exp_reward': 24,
+                'drop_chances': {'weapons': 0.30, 'armor': 0.15, 'shields': 0.10, 'potions': 0.20},
+                'attacks': [
+                    {'name': 'Rusty Blade', 'damage_formula': 'might * 2 + ferocity * 1', 'accuracy_formula': '80 + cunning * 2', 'description': 'Slashes with a corroded weapon', 'type': 'special', 'cooldown': 1, 'special_effects': {'type': 'infection', 'duration': 3, 'damage_per_turn_formula': '2'}},
+                    {'name': 'Dirty Fighting', 'damage_formula': 'cunning * 2 + agility * 1', 'accuracy_formula': '85 + cunning * 2', 'description': 'Fights with underhanded tactics', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'dirty_blow', 'effect': 'ignores_partial_defense'}}
+                ]
+            },
+            'orc_berserker': {
+                'name': 'Orc Berserker', 'type': 'humanoid', 'symbol': 'O', 'color': 'red',
+                'description': 'A massive orc warrior consumed by battle rage, foam dripping from its tusked mouth.',
+                'creature_type': 'brute', 'level': 2,
+                'base_stats': {'might': 11, 'agility': 5, 'cunning': 4, 'vitality': 10, 'ferocity': 12, 'mysticism': 2},
+                'exp_reward': 48,
+                'drop_chances': {'weapons': 0.40, 'armor': 0.25, 'shields': 0.15, 'potions': 0.25},
+                'attacks': [
+                    {'name': 'Berserker Rage', 'damage_formula': 'ferocity * 3 + might * 2', 'accuracy_formula': '75 + ferocity * 1', 'description': 'Attacks in a wild frenzy', 'type': 'special', 'cooldown': 1, 'special_effects': {'type': 'rage', 'duration': 3, 'effect': 'increases_damage_reduces_defense'}},
+                    {'name': 'Crushing Blow', 'damage_formula': 'might * 3 + ferocity * 1', 'accuracy_formula': '70 + might * 2', 'description': 'Brings down a devastating overhead strike', 'type': 'special', 'cooldown': 2, 'special_effects': {'type': 'armor_crush', 'duration': 2, 'effect': 'reduces_defense_significantly'}},
+                    {'name': 'War Cry', 'damage_formula': 'ferocity * 1', 'accuracy_formula': '90 + ferocity * 1', 'description': 'Lets out a terrifying battle cry', 'type': 'special', 'cooldown': 3, 'special_effects': {'type': 'intimidate', 'duration': 2, 'effect': 'reduces_player_accuracy_and_attack'}}
                 ]
             }
         }
@@ -428,3 +492,45 @@ class MonsterDatabase:
     def monster_exists(cls, category, monster_type):
         """Check if a specific monster exists in the database"""
         return category in cls.MONSTERS and monster_type in cls.MONSTERS[category]
+    
+    @classmethod
+    def get_monsters_by_level(cls, target_level):
+        """Get all monsters at a specific level"""
+        monsters_at_level = []
+        
+        for category, monsters in cls.MONSTERS.items():
+            for monster_type, data in monsters.items():
+                monster_level = data.get('level', 1)
+                if monster_level == target_level:
+                    monsters_at_level.append((category, monster_type))
+        
+        return monsters_at_level
+    
+    @classmethod
+    def get_random_monster_by_level(cls, target_level):
+        """Get a random monster at a specific level
+        
+        Args:
+            target_level: The level of monster to spawn
+            
+        Returns:
+            (category, monster_type) tuple
+            
+        Falls back to level 1 monsters if target level not found,
+        then to skeleton if no level 1 monsters exist.
+        """
+        monsters_at_level = cls.get_monsters_by_level(target_level)
+        
+        if monsters_at_level:
+            import random
+            return random.choice(monsters_at_level)
+        
+        # Fallback to level 1 monsters if target level doesn't exist
+        if target_level != 1:
+            monsters_at_level = cls.get_monsters_by_level(1)
+            if monsters_at_level:
+                import random
+                return random.choice(monsters_at_level)
+        
+        # Ultimate fallback to skeleton
+        return ("undead", "skeleton")

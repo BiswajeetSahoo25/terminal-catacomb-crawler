@@ -145,8 +145,19 @@ class Player:
         """Heal the player"""
         self.hp = min(self.max_hp, self.hp + amount)
 
-    def gain_exp(self, amount):
-        """Gain experience points and handle level-ups"""
+    def gain_exp(self, amount, monster_level=None):
+        """Gain experience points and handle level-ups
+        
+        Args:
+            amount: Base experience amount
+            monster_level: Optional monster level for multiplier calculation
+        """
+        if monster_level is not None and monster_level > self.level:
+            # Apply 2x multiplier for each level above player
+            level_difference = monster_level - self.level
+            multiplier = 2 ** level_difference
+            amount = int(amount * multiplier)
+        
         self.exp += amount
         while self.exp >= self.exp_to_next:
             self.level_up()
@@ -171,7 +182,8 @@ class Player:
 
         enemy_died = result["died"]
         if enemy_died:
-            self.gain_exp(getattr(enemy, "exp_reward", 0))
+            monster_level = getattr(enemy, 'level', None)
+            self.gain_exp(getattr(enemy, "exp_reward", 0), monster_level)
 
         return {
             "type": "combat",

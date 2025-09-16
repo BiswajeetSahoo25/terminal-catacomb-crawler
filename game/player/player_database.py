@@ -57,7 +57,7 @@ class PlayerDatabase:
         # melee bruiser / off-tank
         "warrior": {
             "labels": ["melee", "bruiser", "tankish"],
-            "starting_main_bonus": {"strength": +2, "vitality": +2},
+            "starting_main_bonus": {"strength": +4, "vitality": +4},
             "main_affinity": {
                 "strength": 1.15, "vitality": 1.10, "athletism": 1.05,
                 "dexterity": 1.00, "cunning": 0.95, "intelligence": 0.90,
@@ -100,7 +100,7 @@ class PlayerDatabase:
         # stealth assassin (note: 'rogue', not 'rouge')
         "rogue": {
             "labels": ["stealth", "assassin"],
-            "starting_main_bonus": {"dexterity": +2, "cunning": +2},
+            "starting_main_bonus": {"dexterity": +3, "cunning": +3, "luck": +2},
             "main_affinity": {
                 "dexterity": 1.20, "cunning": 1.15, "luck": 1.10,
                 "strength": 0.95, "athletism": 1.05, "vitality": 0.95,
@@ -121,7 +121,7 @@ class PlayerDatabase:
         # trickster skirmisher
         "bandit": {
             "labels": ["skirmisher", "trickster"],
-            "starting_main_bonus": {"dexterity": +1, "cunning": +2, "luck": +1},
+            "starting_main_bonus": {"dexterity": +1, "cunning": +2, "luck": +4},
             "main_affinity": {
                 "cunning": 1.15, "dexterity": 1.10, "luck": 1.15,
                 "strength": 1.00, "athletism": 1.05, "vitality": 0.95,
@@ -142,7 +142,7 @@ class PlayerDatabase:
         # drainy caster with resilience
         "warlock": {
             "labels": ["dark_caster", "drains"],
-            "starting_main_bonus": {"intelligence": +2, "willpower": +2},
+            "starting_main_bonus": {"intelligence": +2, "willpower": +2, "vitality": +3},
             "main_affinity": {
                 "intelligence": 1.15, "willpower": 1.20, "luck": 1.05,
                 "cunning": 1.05, "vitality": 0.95, "strength": 0.90,
@@ -163,7 +163,7 @@ class PlayerDatabase:
         # holy knight: tank/support hybrid
         "paladin": {
             "labels": ["holy_knight", "tank_support"],
-            "starting_main_bonus": {"strength": +1, "vitality": +2, "willpower": +1},
+            "starting_main_bonus": {"strength": +1, "vitality": +5, "willpower": +3},
             "main_affinity": {
                 "vitality": 1.15, "willpower": 1.10, "strength": 1.10,
                 "dexterity": 1.00, "athletism": 1.05, "intelligence": 1.00,
@@ -180,3 +180,10 @@ class PlayerDatabase:
             },
         },
     }
+
+    @classmethod
+    def get_all_stat_names(cls):
+        """Get all available stat names (main + derived)"""
+        main_stats = list(cls.STATS["main"].keys())
+        derived_stats = list(cls.STATS["derived"].keys())
+        return main_stats + derived_stats
