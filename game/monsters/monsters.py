@@ -3,7 +3,7 @@ Monster System - Handles monster AI, stats, and combat using MonsterDatabase
 """
 
 import random
-from .monster_database import MonsterDatabase
+from .monster_database import MonsterDatabase, MonsterStatsSystem
 
 class Monster:
     """Base monster class using MonsterDatabase for definitions"""
@@ -30,6 +30,13 @@ class Monster:
         self.last_seen_player = None
         self.alert_turns = 0
         self.max_alert = 5
+    
+    def get_attacks(self):
+        """Get monster attacks - either calculated or legacy"""
+        if hasattr(self, 'calculated_attacks'):
+            return self.calculated_attacks
+        else:
+            return self.data.get('attacks', [])
         
     def setup_monster_stats(self):
         """Setup stats based on monster data from database"""
@@ -39,21 +46,64 @@ class Monster:
         self.color = self.data['color']
         self.description = self.data['description']
         
-        # Combat stats
-        stats = self.data['stats']
-        self.max_hp = stats['hp']
-        self.hp = self.max_hp
-        self.attack = stats['attack']
-        self.defense = stats['defense']
-        self.speed = stats['speed']
-        self.accuracy = stats['accuracy']
-        self.exp_reward = stats['exp_reward']
+        # Check if monster uses new stats system
+        if 'base_stats' in self.data and 'creature_type' in self.data:
+            # New stats system - calculate stats dynamically
+            self.stats_system = MonsterStatsSystem()
+            calculated_stats = self.stats_system.calculate_stats(
+                self.data['base_stats'], 
+                self.data['creature_type'], 
+                self.data.get('level', 1)
+            )
+            
+            # Combat stats from calculated values
+            self.max_hp = calculated_stats['hp']
+            self.hp = self.max_hp
+            self.attack = calculated_stats['attack'] 
+            self.defense = calculated_stats['defense']
+            self.speed = calculated_stats['speed']
+            self.accuracy = calculated_stats['accuracy'] / 100.0  # Convert to decimal
+            
+            # Legacy stats
+            legacy = self.data.get('legacy_stats', {})
+            self.exp_reward = legacy.get('exp_reward', 10)
+            
+            # Store main stats for reference
+            self.main_stats = self.data['base_stats'].copy()
+            self.derived_stats = calculated_stats
+            
+            # Calculate dynamic attacks using main stats for formulas
+            self.calculated_attacks = []
+            if 'attacks' in self.data:
+                # Get the creature type data to calculate main stats with affinities
+                creature_data = MonsterDatabase.CREATURE_TYPES.get(self.data['creature_type'], MonsterDatabase.CREATURE_TYPES['brute'])
+                level = self.data.get('level', 1)
+                
+                # Calculate main stats with affinities for use in attack formulas
+                main_stats_for_attacks = {}
+                for stat_name, base_value in self.data['base_stats'].items():
+                    affinity = creature_data['affinities'].get(stat_name, 1.0)
+                    main_stats_for_attacks[stat_name] = int(base_value * affinity * level)
+                
+                for attack_data in self.data['attacks']:
+                    calculated_attack = self.stats_system.calculate_attack_stats(attack_data, main_stats_for_attacks)
+                    self.calculated_attacks.append(calculated_attack)
+            
+        else:
+            # Legacy stats system - use old format
+            stats = self.data['stats']
+            self.max_hp = stats['hp']
+            self.hp = self.max_hp
+            self.attack = stats['attack']
+            self.defense = stats['defense']
+            self.speed = stats['speed']
+            self.accuracy = stats['accuracy']
+            self.exp_reward = stats['exp_reward']
         
-        # AI behavior
-        ai = self.data['ai']
-        self.aggression = ai['aggression']
-        self.detection_range = ai['detection_range']
-        self.intelligence = ai['intelligence']
+        # Simple AI defaults - no complex AI needed
+        # Basic AI attributes for movement and detection
+        self.aggression = 0.8
+        self.detection_range = 6
         
         # Initialize attack cooldowns
         for attack in self.data['attacks']:
@@ -85,63 +135,45 @@ class Monster:
     def get_available_attacks(self):
         """Get list of attacks that are not on cooldown"""
         available = []
-        for attack in self.data['attacks']:
-            if self.attack_cooldowns[attack['name']] <= 0:
-                available.append(attack)
+        
+        # Use calculated attacks if available (new stats system)
+        if hasattr(self, 'calculated_attacks') and self.calculated_attacks:
+            for attack in self.calculated_attacks:
+                if self.attack_cooldowns[attack['name']] <= 0:
+                    available.append(attack)
+        else:
+            # Use raw attack data (legacy system)
+            for attack in self.data['attacks']:
+                if self.attack_cooldowns[attack['name']] <= 0:
+                    available.append(attack)
         return available
         
     def choose_attack(self):
-        """Choose an attack based on AI intelligence and available attacks"""
+        """Choose an attack from available options"""
         available_attacks = self.get_available_attacks()
         
         # Always include basic attack as an option
+        # Convert accuracy to percentage (0.0-1.0) if it's a raw number
+        accuracy_value = self.accuracy
+        if accuracy_value > 1.0:
+            accuracy_value = accuracy_value / 100.0
+        
         basic_attack = {
             'name': 'Basic Attack',
             'damage': self.attack,
-            'accuracy': self.accuracy,
+            'accuracy': accuracy_value,
             'description': f'{self.name} attacks',
             'type': 'basic',
             'cooldown': 0,
             'special_effects': None
         }
         
-        # Add basic attack to available options
-        all_attacks = available_attacks + [basic_attack]
-        
-        if not all_attacks:
-            # Fallback (should never happen now)
+        # Simple strategy: use special attacks when available, otherwise basic attack
+        if available_attacks and random.random() < 0.7:  # 70% chance to use special attack
+            # Prefer higher damage attacks
+            return max(available_attacks, key=lambda a: a['damage'])
+        else:
             return basic_attack
-            
-        if self.intelligence == 'very_low':
-            # Random attack selection (50% chance for basic attack)
-            if random.random() < 0.5:
-                return basic_attack
-            return random.choice(available_attacks) if available_attacks else basic_attack
-        elif self.intelligence == 'low':
-            # Mix of basic attacks and special attacks (30% basic)
-            if random.random() < 0.3 or not available_attacks:
-                return basic_attack
-            return min(available_attacks, key=lambda a: a['cooldown'])
-        elif self.intelligence == 'medium':
-            # Strategic mix (20% basic attack, prefer efficient specials)
-            if random.random() < 0.2:
-                return basic_attack
-            return max(all_attacks, key=lambda a: a['damage'] * a['accuracy'])
-        else:  # high intelligence
-            # Smart usage (15% basic attack, prefer special abilities for variety)
-            if random.random() < 0.15:
-                return basic_attack
-            
-            # High intelligence monsters prefer using their special abilities
-            if available_attacks:
-                # Choose best damage attack when HP is low, balanced otherwise
-                if self.hp <= self.max_hp * 0.3:
-                    return max(available_attacks, key=lambda a: a['damage'])
-                else:
-                    return max(available_attacks, key=lambda a: a['damage'] * a['accuracy'])
-            else:
-                # No specials available, use basic attack
-                return basic_attack
     
     def update_cooldowns(self):
         """Reduce all attack cooldowns by 1"""
