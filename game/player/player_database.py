@@ -28,7 +28,7 @@ class PlayerDatabase:
             "crit_chance":      {"name": "Critical Hit Chance", "description": "Crit probability", "formula": "cunning * 0.5 + luck * 0.2", "min_value": 0, "max_value": 100},
             "crit_damage":      {"name": "Critical Damage", "description": "Crit multiplier %", "formula": "150 + (cunning * 0.3)", "min_value": 100, "max_value": 300},
             "defense":          {"name": "Defense", "description": "Reduce physical dmg (%)", "formula": "vitality * 0.5 + strength * 0.3 + athletism * 0.2", "min_value": 0, "max_value": 999},
-            "magic_resistance": {"name": "Magic Resistance", "description": "Reduce magic dmg (%)", "formula": "willpower * 0.5 + intelligence * 0.2", "min_value": 0, "max_value": 90},
+            # "magic_resistance": {"name": "Magic Resistance", "description": "Reduce magic dmg (%)", "formula": "willpower * 0.5 + intelligence * 0.2", "min_value": 0, "max_value": 90},
             "resilience":       {"name": "Resilience", "description": "Status effect resistance", "formula": "vitality * 0.3 + willpower * 0.5", "min_value": 0, "max_value": 95},
             "attack":           {"name": "Attack", "description": "Physical damage scaler", "formula": "strength * 2 + dexterity * 0.5", "min_value": 1, "max_value": 999},
             "speed":            {"name": "Speed", "description": "Movement/turn pacing", "formula": "dexterity * 0.5 + athletism * 0.5", "min_value": 1, "max_value": 200},
@@ -65,7 +65,7 @@ class PlayerDatabase:
             },
             "derived_affinity": {
                 # existing
-                "health": 1.10, "defense": 1.20, "parry": 1.15, "stamina": 1.10,
+                "health": 1.20, "defense": 1.30, "parry": 1.25, "stamina": 1.20,
                 "accuracy": 1.00, "dodge": 0.95, "crit_chance": 0.95, "crit_damage": 1.00,
                 "mana": 0.80, "magic_resistance": 1.00, "resilience": 1.10,
                 # new

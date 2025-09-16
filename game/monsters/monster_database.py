@@ -395,7 +395,7 @@ class MonsterDatabase:
                 'name': 'Orc Berserker', 'type': 'humanoid', 'symbol': 'O', 'color': 'red',
                 'description': 'A massive orc warrior consumed by battle rage, foam dripping from its tusked mouth.',
                 'creature_type': 'brute', 'level': 2,
-                'base_stats': {'might': 11, 'agility': 5, 'cunning': 4, 'vitality': 10, 'ferocity': 12, 'mysticism': 2},
+                'base_stats': {'might': 7, 'agility': 5, 'cunning': 4, 'vitality': 10, 'ferocity': 12, 'mysticism': 2},
                 'exp_reward': 48,
                 'drop_chances': {'weapons': 0.40, 'armor': 0.25, 'shields': 0.15, 'potions': 0.25},
                 'attacks': [

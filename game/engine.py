@@ -10,6 +10,7 @@ from .ui import UI
 from .monsters.monsters import MonsterManager as EnemyManager
 from .combat import CombatManager, COMBAT_ACTIONS
 from .character_creation import CharacterCreator
+from .level_up_ui import LevelUpUI
 
 class GameEngine:
     """Main game engine that handles the core game loop"""
@@ -59,6 +60,7 @@ class GameEngine:
         # Create other game objects
         self.level = Level(width=60, height=30)
         self.ui = UI(self.terminal)
+        self.level_up_ui = LevelUpUI(self.terminal)
         self.enemy_manager = EnemyManager()
         
         # Generate initial level
@@ -139,6 +141,18 @@ class GameEngine:
         elif key.lower() == 'c':  # Character stats
             self.show_character_stats()
             self.needs_render = True
+            return
+        elif key.lower() == 'l':  # Level up / stat allocation
+            if self.player.stat_points > 0:
+                self.level_up_ui.show_level_up_screen(self.player)
+                self.needs_render = True
+            else:
+                # Show a message that no stat points are available
+                print(self.terminal.clear)
+                print(f"{self.terminal.yellow}No stat points available to allocate.{self.terminal.normal}")
+                print("Gain experience and level up to earn more stat points!")
+                input("Press Enter to continue...")
+                self.needs_render = True
             return
             
         # Combat input handling
@@ -850,6 +864,11 @@ class GameEngine:
         
         # Show combat summary screen
         self.ui.show_combat_summary(summary, self.player)
+        
+        # Check for level up and show stat allocation if needed
+        if level_up and self.player.stat_points > 0:
+            self.level_up_ui.show_level_up_screen(self.player)
+        
         self.needs_render = True
         
     def player_combat_action(self, action_name):
