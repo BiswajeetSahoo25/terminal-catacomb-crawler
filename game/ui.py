@@ -10,9 +10,19 @@ class UI:
         self.terminal = terminal
         self.view_radius = 25  # How far player can see - increased for better visibility
         
-    def render(self, player, level, enemy_manager=None, combat_messages=None):
+    def render(self, player, level, enemy_manager=None, combat_messages=None, dungeon_level=1, in_door_room=False, awaiting_stairs_confirmation=False):
         """Render the entire game screen"""
+        # Don't clear screen or render anything if waiting for stairs confirmation
+        if awaiting_stairs_confirmation:
+            return
+            
         print(self.terminal.clear)
+        
+        # Create level info dictionary
+        level_info = {
+            "dungeon_level": dungeon_level,
+            "in_door_room": in_door_room
+        }
         
         # Determine combat state
         in_combat = hasattr(enemy_manager, 'combat_manager') and getattr(enemy_manager.combat_manager, 'in_combat', False) if enemy_manager else False
@@ -22,22 +32,22 @@ class UI:
         
         if in_combat:
             # Combat mode - show only stats and combat info
-            self.render_combat_screen(player, enemy_manager, combat_messages, is_player_turn)
+            self.render_combat_screen(player, enemy_manager, combat_messages, is_player_turn, level_info)
         else:
             # Exploration mode - show map and normal UI
-            self.render_exploration_screen(player, level, enemy_manager, combat_messages)
+            self.render_exploration_screen(player, level, enemy_manager, combat_messages, level_info)
             
-    def render_exploration_screen(self, player, level, enemy_manager, combat_messages):
+    def render_exploration_screen(self, player, level, enemy_manager, combat_messages, level_info):
         """Render the exploration screen with map"""
         # Render the map
         self.render_map(player, level, enemy_manager)
         
         # Render UI elements
-        self.render_status_bar(player)
+        self.render_status_bar(player, level_info)
         # No combat messages during exploration
         self.render_controls(in_combat=False, is_player_turn=False)
         
-    def render_combat_screen(self, player, enemy_manager, combat_messages, is_player_turn):
+    def render_combat_screen(self, player, enemy_manager, combat_messages, is_player_turn, level_info):
         """Render the combat screen without map"""
         print(self.terminal.bold + "=== COMBAT MODE ===" + self.terminal.normal)
         print()
@@ -200,7 +210,7 @@ class UI:
         color_func = color_map.get(enemy.color, self.terminal.red)
         return color_func(enemy.symbol)
             
-    def render_status_bar(self, player):
+    def render_status_bar(self, player, level_info=None):
         """Render player status information"""
         stats = player.get_stats()
         
@@ -214,11 +224,19 @@ class UI:
         exp_info = self.create_exp_bar_info(player, 20)
         print(f"EXP:    {exp_info['colored_bar']} ({exp_info['text']})")
         
+        # Location information
+        location_text = "Main Level"
+        if level_info and level_info.get("in_door_room", False):
+            location_text = "Door Room"
+        
+        dungeon_level = level_info.get("dungeon_level", 1) if level_info else 1
+        
         # Stats
-        print(f"Level: {stats['level']} | "
+        print(f"Player Level: {stats['level']} | "
+              f"Dungeon Level: {self.terminal.cyan(str(dungeon_level))} | "
               f"Attack: {stats['attack']} | "
-              f"Defense: {stats['defense']} | "
-              f"Position: ({stats['position'][0]}, {stats['position'][1]})")
+              f"Defense: {stats['defense']}")
+        print(f"Location: {location_text} | Position: ({stats['position'][0]}, {stats['position'][1]})")
 
               
     def render_combat_status_bar(self, player):
@@ -243,8 +261,8 @@ class UI:
             
         print(self.terminal.bold + "Combat Log:" + self.terminal.normal)
         
-        # Show last 3 combat messages to avoid clutter
-        recent_messages = combat_messages[-3:] if len(combat_messages) > 3 else combat_messages
+        # Show last 5 combat messages to avoid clutter
+        recent_messages = combat_messages[-5:] if len(combat_messages) > 5 else combat_messages
         
         for msg in recent_messages:
             if msg["type"] == "combat":
@@ -282,6 +300,10 @@ class UI:
                     if msg.get("player_died"):
                         text += " You have fallen!"
                     print(f"  {self.terminal.red(text)}")
+            elif msg["type"] == "deflection":
+                print(f"  {self.terminal.blue + self.terminal.bold}⚡ {msg['message']}{self.terminal.normal}")
+            elif msg["type"] == "round_separator":
+                print(f"  {self.terminal.dim}{msg['message']}{self.terminal.normal}")
             elif msg["type"] == "system":
                 print(f"  {self.terminal.yellow(msg['message'])}")
               
@@ -303,7 +325,7 @@ class UI:
             else:
                 print("COMBAT - Enemy Turn: Wait for your turn...")
         else:
-            print("EXPLORATION: WASD/Arrows=Move | Q=Quit | I=Inventory")
+            print("EXPLORATION: WASD/Arrows=Move | E=Interact with Doors and Stairs | Q=Quit | I=Inventory")
         
     def show_inventory(self, player):
         """Display player inventory (placeholder for now)"""

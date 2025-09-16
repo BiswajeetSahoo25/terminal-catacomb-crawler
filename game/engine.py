@@ -5,7 +5,7 @@ Game Engine - Core game loop and state management
 import time
 from blessed import Terminal
 from .player import Player
-from .level import Level
+from .level import Level, DoorRoom
 from .ui import UI
 from .monsters.monsters import MonsterManager as EnemyManager
 from .combat import CombatManager, COMBAT_ACTIONS
@@ -24,6 +24,15 @@ class GameEngine:
         self.combat_manager = CombatManager()
         self.combat_messages = []
         self.character_creator = None
+        
+        # Door room system
+        self.door_rooms = {}  # Dictionary mapping door positions to DoorRoom objects
+        self.current_door_room = None
+        self.in_door_room = False
+        
+        # Level progression system
+        self.dungeon_level = 1  # Current dungeon level (not player level)
+        self.awaiting_stairs_confirmation = False
         
         # Combat tracking
         self.combat_stats = {
@@ -83,10 +92,12 @@ class GameEngine:
                 if self.needs_render:
                     # Add combat manager to enemy manager for UI access
                     self.enemy_manager.combat_manager = self.combat_manager
-                    self.ui.render(self.player, self.level, self.enemy_manager, self.combat_messages)
+                    current_level = self.current_door_room if self.in_door_room else self.level
+                    self.ui.render(self.player, current_level, self.enemy_manager, self.combat_messages, 
+                                 self.dungeon_level, self.in_door_room, self.awaiting_stairs_confirmation)
                     # Clear old combat messages after showing them
-                    if len(self.combat_messages) > 5:
-                        self.combat_messages = self.combat_messages[-3:]
+                    if len(self.combat_messages) > 8:
+                        self.combat_messages = self.combat_messages[-5:]
                     self.needs_render = False
                 
                 # Handle input
@@ -107,6 +118,14 @@ class GameEngine:
         key = self.terminal.inkey(timeout=0.1)
         
         if not key:
+            return
+        
+        # Handle stairs confirmation input
+        if self.awaiting_stairs_confirmation:
+            if key.lower() == 'y':
+                self.confirm_stairs_descent(True)
+            elif key.lower() == 'n':
+                self.confirm_stairs_descent(False)
             return
             
         # Global commands (work in and out of combat)
@@ -141,6 +160,10 @@ class GameEngine:
             new_x -= 1
         elif key.lower() == 'd' or key.code == self.terminal.KEY_RIGHT:
             new_x += 1
+        elif key.lower() == 'e':
+            # Interaction key - check for doors
+            self.handle_door_interaction()
+            return
         else:
             return  # Invalid exploration key
             
@@ -160,6 +183,281 @@ class GameEngine:
             self.player.move(new_x, new_y)
             self.check_for_enemy_encounters()
             self.needs_render = True
+    
+    def handle_door_interaction(self):
+        """Handle interaction with doors and stairs"""
+        player_x, player_y = self.player.x, self.player.y
+        
+        if self.in_door_room:
+            # Check if player is at the exit door
+            if self.current_door_room and self.current_door_room.get_tile(player_x, player_y) == '+':
+                # Exit the door room
+                self.exit_door_room()
+                return
+        else:
+            # Check if player is standing on something interactable
+            current_tile = self.level.get_tile(player_x, player_y)
+            
+            if current_tile == self.level.DOOR:
+                self.enter_door_room(player_x, player_y)
+                return
+            elif current_tile == self.level.STAIRS_DOWN:
+                # Show warning and handle stairs down
+                self.handle_stairs_down()
+                return
+            
+            # Also check adjacent tiles for interactables on the main level
+            adjacent_positions = [
+                (player_x, player_y - 1),  # North
+                (player_x, player_y + 1),  # South
+                (player_x - 1, player_y),  # West
+                (player_x + 1, player_y)   # East
+            ]
+            
+            for x, y in adjacent_positions:
+                if (0 <= x < self.level.width and 0 <= y < self.level.height):
+                    tile = self.level.get_tile(x, y)
+                    if tile == self.level.DOOR:
+                        # Enter the door room
+                        self.enter_door_room(x, y)
+                        return
+                    elif tile == self.level.STAIRS_DOWN:
+                        # Show warning and handle stairs down
+                        self.handle_stairs_down()
+                        return
+    
+    def enter_door_room(self, door_x, door_y):
+        """Enter a door room"""
+        door_key = f"{door_x},{door_y}"
+        
+        # Create door room if it doesn't exist
+        if door_key not in self.door_rooms:
+            self.door_rooms[door_key] = DoorRoom(door_x, door_y)
+        
+        door_room = self.door_rooms[door_key]
+        
+        # Generate the room if not already generated
+        if not door_room.generated:
+            door_room.generate()
+        
+        # Set current state
+        self.current_door_room = door_room
+        self.in_door_room = True
+        
+        # Move player to entrance
+        self.player.move(door_room.entrance_x, door_room.entrance_y)
+        
+        # Spawn enemies in the door room
+        self.spawn_door_room_enemies()
+        
+        self.needs_render = True
+    
+    def exit_door_room(self):
+        """Exit the current door room"""
+        if self.current_door_room:
+            # Return player to door position on main level
+            self.player.move(self.current_door_room.door_x, self.current_door_room.door_y)
+            
+            # Reset door room state (but keep the room in memory)
+            self.current_door_room = None
+            self.in_door_room = False
+            
+            self.needs_render = True
+    
+    def spawn_door_room_enemies(self):
+        """Spawn enemies in the current door room (only if not already spawned)"""
+        if not self.current_door_room:
+            return
+        
+        # Get active enemy positions (those that haven't been defeated)
+        active_positions = self.current_door_room.get_active_enemy_positions()
+        
+        # Check if enemies are already spawned in this room
+        enemies_already_present = False
+        for x, y in active_positions:
+            if self.enemy_manager.get_enemy_at(x, y):
+                enemies_already_present = True
+                break
+        
+        # Only spawn enemies if they haven't been spawned yet and room hasn't been fully cleared
+        if not enemies_already_present and active_positions:
+            # Spawn enemies at the active positions only
+            for x, y in active_positions:
+                # Choose difficulty based on player level but make door rooms slightly easier
+                if self.player.level <= 2:
+                    difficulty = "easy"
+                elif self.player.level <= 5:
+                    difficulty = "easy"  # Keep it easy in door rooms
+                else:
+                    difficulty = "medium"  # Medium at higher levels
+                    
+                self.enemy_manager.spawn_random_monster(x, y, difficulty)
+            
+            # Mark that enemies have been spawned for this room
+            self.current_door_room.enemies_spawned = True
+    
+    def clear_door_room_enemies(self):
+        """Clear all enemies from the current door room"""
+        if not self.current_door_room:
+            return
+        
+        # Remove enemies at door room positions
+        enemies_to_remove = []
+        for enemy in self.enemy_manager.enemies:
+            for x, y in self.current_door_room.enemy_positions:
+                if enemy.x == x and enemy.y == y:
+                    enemies_to_remove.append(enemy)
+        
+        for enemy in enemies_to_remove:
+            if hasattr(self.enemy_manager, 'remove_enemy'):
+                self.enemy_manager.remove_enemy(enemy)
+            else:
+                # Fallback: just remove from the list
+                if enemy in self.enemy_manager.enemies:
+                    self.enemy_manager.enemies.remove(enemy)
+    
+    def track_defeated_door_enemies(self):
+        """Track which enemies in door rooms have been defeated"""
+        if not self.in_door_room or not self.current_door_room:
+            return
+        
+        # Check each enemy position in the current door room
+        for x, y in self.current_door_room.enemy_positions:
+            # If there's no enemy at this position anymore, mark it as defeated
+            if not self.enemy_manager.get_enemy_at(x, y):
+                if (x, y) not in self.current_door_room.defeated_enemy_positions:
+                    self.current_door_room.mark_enemy_defeated(x, y)
+    
+    def handle_stairs_down(self):
+        """Handle stairs down interaction with warning"""
+        if not self.awaiting_stairs_confirmation:
+            # Show warning screen
+            self.show_stairs_warning()
+            self.awaiting_stairs_confirmation = True
+            # Don't set needs_render = True here, let the warning stay on screen
+        
+    def show_stairs_warning(self):
+        """Show warning about going down stairs"""
+        print(self.terminal.clear)
+        print(self.terminal.bold + self.terminal.red + "WARNING!" + self.terminal.normal)
+        print()
+        print("You are about to descend to the next dungeon level.")
+        print()
+        print(self.terminal.yellow + "Benefits of going down:" + self.terminal.normal)
+        print("• +20% Maximum Health")
+        print("• +20% Experience Bonus")
+        print("• New challenges and enemies")
+        print()
+        print(self.terminal.red + "WARNING: You cannot return to previous levels!" + self.terminal.normal)
+        print()
+        print("Are you sure you want to continue?")
+        print()
+        print(self.terminal.bold + "Y = Yes, descend to next level" + self.terminal.normal)
+        print(self.terminal.bold + "N = No, stay on current level" + self.terminal.normal)
+        print()
+        
+    def confirm_stairs_descent(self, confirm):
+        """Handle stairs descent confirmation"""
+        self.awaiting_stairs_confirmation = False
+        
+        if confirm:
+            self.descend_to_next_level()
+        else:
+            # Player chose not to descend, just return to normal game
+            self.needs_render = True
+    
+    def descend_to_next_level(self):
+        """Descend to the next dungeon level"""
+        # Increment dungeon level
+        self.dungeon_level += 1
+        
+        # Apply bonuses to player
+        old_max_hp = self.player.max_hp
+        
+        # +20% health bonus
+        health_bonus = int(self.player.base_max_hp * 0.2)
+        self.player.base_max_hp += health_bonus
+        self.player.recalculate_stats()  # This will update max_hp
+        
+        # Heal player to full health (they earned it!)
+        self.player.hp = self.player.max_hp
+        
+        # +20% experience bonus (based on exp needed for next level)
+        exp_bonus = int(self.player.exp_to_next * 0.2)
+        self.player.gain_exp(exp_bonus)
+        
+        # Clear all enemies and door rooms
+        self.enemy_manager.enemies.clear()
+        if hasattr(self.enemy_manager, 'monsters'):
+            self.enemy_manager.monsters.clear()
+        self.door_rooms.clear()
+        self.current_door_room = None
+        self.in_door_room = False
+        
+        # Generate new level
+        self.level.generate()
+        
+        # Place player in a new starting position
+        start_x, start_y = self.level.get_random_floor_position()
+        self.player.x = start_x
+        self.player.y = start_y
+        
+        # Spawn enemies for the new level (more challenging)
+        self.spawn_enemies_for_level(self.dungeon_level)
+        
+        # Show level transition message
+        self.show_level_transition_message(health_bonus, exp_bonus)
+        
+        # Now render the new level
+        self.needs_render = True
+    
+    def spawn_enemies_for_level(self, dungeon_level):
+        """Spawn enemies appropriate for the dungeon level"""
+        import random
+        
+        # More enemies on deeper levels
+        base_enemies = 3
+        bonus_enemies = min(dungeon_level - 1, 4)  # Cap at +4 bonus enemies
+        num_enemies = random.randint(base_enemies + bonus_enemies, base_enemies + bonus_enemies + 2)
+        
+        for _ in range(num_enemies):
+            attempts = 0
+            while attempts < 50:
+                x, y = self.level.get_random_floor_position()
+                
+                # Make sure enemy isn't too close to player
+                distance = abs(x - self.player.x) + abs(y - self.player.y)
+                if distance > 8:
+                    # Choose difficulty based on dungeon level
+                    if dungeon_level <= 2:
+                        difficulty = random.choice(["easy", "medium"])
+                    elif dungeon_level <= 4:
+                        difficulty = random.choice(["medium", "medium", "hard"])
+                    elif dungeon_level <= 6:
+                        difficulty = random.choice(["medium", "hard", "hard"])
+                    else:
+                        difficulty = random.choice(["hard", "hard", "boss"])
+                    
+                    self.enemy_manager.spawn_random_monster(x, y, difficulty)
+                    break
+                attempts += 1
+    
+    def show_level_transition_message(self, health_bonus, exp_bonus):
+        """Show message about level transition bonuses"""
+        print(self.terminal.clear)
+        print(self.terminal.bold + self.terminal.green + f"Welcome to Dungeon Level {self.dungeon_level}!" + self.terminal.normal)
+        print()
+        print("You have been strengthened by your descent:")
+        print(f"• Health increased by {health_bonus} points!")
+        print(f"• Gained {exp_bonus} bonus experience!")
+        print(f"• Your maximum health is now {self.player.max_hp}")
+        print()
+        print("New challenges await...")
+        print()
+        print("Press any key to continue...")
+        
+        # Wait for user input
+        self.terminal.inkey()
             
     def handle_combat_input(self, key):
         """Handle input during combat"""
@@ -417,13 +715,22 @@ class GameEngine:
             
     def can_move_to(self, x, y):
         """Check if the player can move to the given position"""
-        # Check bounds
-        if not (0 <= x < self.level.width and 0 <= y < self.level.height):
-            return False
-            
-        # Check if it's a walkable tile
-        if not self.level.is_walkable(x, y):
-            return False
+        if self.in_door_room and self.current_door_room:
+            # Check bounds for door room
+            if not (0 <= x < self.current_door_room.width and 0 <= y < self.current_door_room.height):
+                return False
+                
+            # Check if it's a walkable tile in door room
+            if not self.current_door_room.is_walkable(x, y):
+                return False
+        else:
+            # Check bounds for main level
+            if not (0 <= x < self.level.width and 0 <= y < self.level.height):
+                return False
+                
+            # Check if it's a walkable tile on main level
+            if not self.level.is_walkable(x, y):
+                return False
             
         # Check if there's an enemy (can't move into enemy, must attack)
         if self.enemy_manager.get_enemy_at(x, y):
@@ -438,6 +745,9 @@ class GameEngine:
         else:
             # Check for random enemy encounters or other events
             pass
+        
+        # Track defeated enemies in door rooms
+        self.track_defeated_door_enemies()
         
         # Check if player died
         if self.player.hp <= 0:
@@ -454,12 +764,23 @@ class GameEngine:
                     # Enemy takes action
                     action_result = self.enemy_combat_action(enemy)
                     if action_result:
-                        self.combat_messages.append(action_result)
+                        # Handle both single message and list of messages
+                        if isinstance(action_result, list):
+                            self.combat_messages.extend(action_result)
+                        else:
+                            self.combat_messages.append(action_result)
                         self.needs_render = True
                         
                 # End enemy turn
                 turn_msg = self.combat_manager.end_turn()
                 if turn_msg:
+                    # Add separator for new rounds to make them more readable
+                    if "Round" in turn_msg and "begins" in turn_msg:
+                        # Keep only the last few messages and add the new round
+                        if len(self.combat_messages) > 3:
+                            self.combat_messages = self.combat_messages[-3:]
+                        self.combat_messages.append({"type": "round_separator", "message": "---"})
+                    
                     self.combat_messages.append({"type": "system", "message": turn_msg})
                     
                     # Check if combat ended
@@ -574,6 +895,14 @@ class GameEngine:
         if result["success"]:
             self.combat_messages.append({"type": "combat", **result})
             
+            # Add deflection message if damage was deflected
+            deflected = result.get("deflected", 0)
+            if deflected > 0:
+                self.combat_messages.append({
+                    "type": "deflection", 
+                    "message": f"The Hero deflects {deflected} damage!"
+                })
+            
             # Track enemy defeats
             if result.get("target_died", False):
                 self.combat_stats["enemies_defeated"] += 1
@@ -600,7 +929,22 @@ class GameEngine:
             result = action.execute_attack(enemy, self.player)
             
             if result["success"]:
-                return {"type": "combat", **result}
+                # Add the main combat message
+                combat_message = {"type": "combat", **result}
+                
+                # Add deflection message if damage was deflected
+                deflected = result.get("deflected", 0)
+                if deflected > 0:
+                    # Return both messages - the combat message first, then deflection
+                    return [
+                        combat_message,
+                        {
+                            "type": "deflection", 
+                            "message": f"The Hero deflects {deflected} damage!"
+                        }
+                    ]
+                else:
+                    return combat_message
                 
         return None
         
