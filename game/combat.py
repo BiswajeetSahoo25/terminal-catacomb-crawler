@@ -232,8 +232,17 @@ class CombatAction:
             # Handle experience gain for player
             exp_gained = 0
             if hasattr(attacker, 'gain_exp') and target_died and hasattr(target, 'exp_reward'):
-                attacker.gain_exp(target.exp_reward)
-                exp_gained = target.exp_reward
+                monster_level = getattr(target, 'level', None)
+                original_exp = target.exp_reward
+                attacker.gain_exp(target.exp_reward, monster_level)
+                
+                # Calculate actual exp gained for display (including multipliers)
+                if monster_level is not None and monster_level > attacker.level:
+                    level_difference = monster_level - attacker.level
+                    multiplier = 2 ** level_difference
+                    exp_gained = int(original_exp * multiplier)
+                else:
+                    exp_gained = original_exp
                 
             return {
                 "success": True,

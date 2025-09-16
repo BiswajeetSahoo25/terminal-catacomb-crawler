@@ -283,15 +283,10 @@ class GameEngine:
         if not enemies_already_present and active_positions:
             # Spawn enemies at the active positions only
             for x, y in active_positions:
-                # Choose difficulty based on player level but make door rooms slightly easier
-                if self.player.level <= 2:
-                    difficulty = "easy"
-                elif self.player.level <= 5:
-                    difficulty = "easy"  # Keep it easy in door rooms
-                else:
-                    difficulty = "medium"  # Medium at higher levels
-                    
-                self.enemy_manager.spawn_random_monster(x, y, difficulty)
+                # Use level-based spawning for door rooms, but keep them slightly easier
+                # Cap the effective level to make door rooms more manageable
+                effective_player_level = max(1, self.player.level - 1)
+                self.enemy_manager.spawn_monster_by_level(x, y, effective_player_level)
             
             # Mark that enemies have been spawned for this room
             self.current_door_room.enemies_spawned = True
@@ -428,17 +423,15 @@ class GameEngine:
                 # Make sure enemy isn't too close to player
                 distance = abs(x - self.player.x) + abs(y - self.player.y)
                 if distance > 8:
-                    # Choose difficulty based on dungeon level
-                    if dungeon_level <= 2:
-                        difficulty = random.choice(["easy", "medium"])
-                    elif dungeon_level <= 4:
-                        difficulty = random.choice(["medium", "medium", "hard"])
-                    elif dungeon_level <= 6:
-                        difficulty = random.choice(["medium", "hard", "hard"])
-                    else:
-                        difficulty = random.choice(["hard", "hard", "boss"])
+                    # Use level-based spawning - the deeper you go, the slightly higher level monsters
+                    # Dungeon level adds some challenge by occasionally spawning higher level enemies
+                    effective_player_level = self.player.level
+                    if dungeon_level > 3:
+                        # At deeper levels, occasionally spawn enemies 1-2 levels higher
+                        if random.random() < 0.3:  # 30% chance
+                            effective_player_level += min(2, dungeon_level - 3)
                     
-                    self.enemy_manager.spawn_random_monster(x, y, difficulty)
+                    self.enemy_manager.spawn_monster_by_level(x, y, effective_player_level)
                     break
                 attempts += 1
     
@@ -805,22 +798,8 @@ class GameEngine:
                 # Make sure enemy isn't too close to player
                 distance = abs(x - self.player.x) + abs(y - self.player.y)
                 if distance > 8:  # At least 8 tiles away
-                    # Dynamic monster spawning based on player level
-                    if self.player.level <= 3:
-                        # Early game: spawn easy monsters
-                        self.enemy_manager.spawn_random_monster(x, y, "easy")
-                    elif self.player.level <= 6:
-                        # Mid game: mix of easy and medium monsters
-                        difficulty = random.choice(["easy", "easy", "medium"])  # More easy
-                        self.enemy_manager.spawn_random_monster(x, y, difficulty)
-                    elif self.player.level <= 10:
-                        # Late game: medium and hard monsters
-                        difficulty = random.choice(["medium", "medium", "hard"])  # More medium
-                        self.enemy_manager.spawn_random_monster(x, y, difficulty)
-                    else:
-                        # End game: hard and boss monsters
-                        difficulty = random.choice(["hard", "boss"])
-                        self.enemy_manager.spawn_random_monster(x, y, difficulty)
+                    # Use level-based spawning system
+                    self.enemy_manager.spawn_monster_by_level(x, y, self.player.level)
                     break
                 attempts += 1
                 
