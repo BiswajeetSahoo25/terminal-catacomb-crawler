@@ -43,6 +43,14 @@ class Player:
         self.parry = self.stats.get_stat('parry')
         self.athletism = self.stats.get_stat('athletism')
         self.cunning = self.stats.get_stat('cunning')
+        
+        # Combat stats for advanced attack mechanics
+        self.crit_chance = self.stats.get_stat('crit_chance')
+        self.crit_damage = self.stats.get_stat('crit_damage')
+        self.armor = self.stats.get_stat('armor')
+        self.block_chance = self.stats.get_stat('block_chance')
+        self.armor_penetration = self.stats.get_stat('armor_penetration')
+        self.damage_reduction = self.stats.get_stat('damage_reduction')
 
         # Character progression
         self.level = 1
@@ -142,6 +150,14 @@ class Player:
         self.parry = self.stats.get_stat('parry')
         self.athletism = self.stats.get_stat('athletism')
         self.cunning = self.stats.get_stat('cunning')
+        
+        # Combat stats for advanced attack mechanics
+        self.crit_chance = self.stats.get_stat('crit_chance')
+        self.crit_damage = self.stats.get_stat('crit_damage')
+        self.armor = self.stats.get_stat('armor')
+        self.block_chance = self.stats.get_stat('block_chance')
+        self.armor_penetration = self.stats.get_stat('armor_penetration')
+        self.damage_reduction = self.stats.get_stat('damage_reduction')
 
         # Keep current HP proportionally within new max
         self.hp = min(self.max_hp, int(round(self.max_hp * old_ratio)))
@@ -155,12 +171,19 @@ class Player:
         """Check if player is still alive"""
         return self.hp > 0
 
-    def take_damage(self, damage):
-        """Player takes damage and returns damage info"""
-        # Simple flat reduction by 'defense'. If you later change to % models,
-        # adjust here (e.g., damage *= (100 - defense%) / 100).
-        actual_damage = max(1, damage - self.defense)
+    def take_damage(self, damage, attacker_armor_penetration=0):
+        """Player takes damage with percentage-based damage reduction and armor penetration"""
+        # Calculate effective damage reduction based on armor penetration
+        effective_damage_reduction = max(0, self.damage_reduction - attacker_armor_penetration)
+        
+        # Apply percentage-based damage reduction
+        damage_reduction_factor = effective_damage_reduction / 100.0
+        damage_after_reduction = damage * (1 - damage_reduction_factor)
+        
+        # Ensure minimum damage of 1
+        actual_damage = max(1, int(damage_after_reduction))
         deflected_damage = damage - actual_damage
+        
         self.hp -= actual_damage
 
         died = False
@@ -170,7 +193,12 @@ class Player:
 
         return {
             "died": died,
-            "deflected": deflected_damage
+            "deflected": deflected_damage,
+            "damage_reduction": effective_damage_reduction,
+            "base_damage_reduction": self.damage_reduction,
+            "attacker_armor_penetration": attacker_armor_penetration,
+            "original_damage": damage,
+            "final_damage": actual_damage
         }
 
     def heal(self, amount):
@@ -219,12 +247,90 @@ class Player:
         return True  # Indicate level up occurred
 
     def attack_enemy(self, enemy):
-        """Attack an enemy"""
+        """Basic Attack - Uses full stats system for accuracy, damage, and special mechanics"""
         import random
-        # Use derived 'attack' as scaler; add some variance
-        damage = max(1, int(self.attack + random.randint(-2, 3)))
-        result = enemy.take_damage(damage)
-
+        
+        # === HIT CALCULATION ===
+        # Convert our accuracy percentage to 0-1 range
+        player_accuracy = min(100, max(10, self.accuracy)) / 100.0
+        
+        # Enemy dodge chance (if they have it)
+        enemy_dodge = getattr(enemy, 'dodge', 0)
+        if enemy_dodge > 1.0:  # Convert percentage to decimal if needed
+            enemy_dodge = enemy_dodge / 100.0
+        
+        # Final hit chance = accuracy - enemy dodge (minimum 5% hit chance)
+        hit_chance = max(0.05, player_accuracy - enemy_dodge)
+        
+        # Roll for hit
+        hit_roll = random.random()
+        if hit_roll > hit_chance:
+            # Generate detailed miss message
+            miss_reason = ""
+            if player_accuracy < 0.8:
+                miss_reason = f" (Low accuracy: {player_accuracy*100:.0f}%)"
+            elif enemy_dodge > 0.1:
+                miss_reason = f" (Enemy dodged: {enemy_dodge*100:.0f}% dodge chance)"
+            else:
+                miss_reason = f" (Bad luck: rolled {hit_roll*100:.0f}% vs {hit_chance*100:.0f}% hit chance)"
+            
+            return {
+                "type": "combat",
+                "attacker": self.name,
+                "target": enemy.name,
+                "damage": 0,
+                "hit": False,
+                "enemy_died": False,
+                "exp_gained": 0,
+                "leveled_up": False,
+                "message": f"{self.name} misses {enemy.name}!{miss_reason}",
+                "hit_roll": hit_roll,
+                "hit_chance": hit_chance,
+                "accuracy": player_accuracy,
+                "enemy_dodge": enemy_dodge
+            }
+        
+        # === DAMAGE CALCULATION ===
+        # Base damage from attack stat
+        base_damage = self.attack
+        
+        # Add variance (-15% to +25% of base damage)
+        variance_min = int(base_damage * -0.15)
+        variance_max = int(base_damage * 0.25)
+        damage_variance = random.randint(variance_min, variance_max)
+        
+        total_damage = max(1, base_damage + damage_variance)
+        
+        # === CRITICAL HIT CHECK ===
+        crit_chance = min(100, max(0, self.crit_chance)) / 100.0
+        crit_roll = random.random()
+        is_critical = crit_roll <= crit_chance
+        
+        if is_critical:
+            # Apply critical damage multiplier (e.g., 150% = 1.5x damage)
+            crit_multiplier = self.crit_damage / 100.0
+            total_damage = int(total_damage * crit_multiplier)
+        
+        # === ENEMY DEFENSIVE MECHANICS ===
+        # Check if enemy can parry (basic implementation)
+        enemy_parry = getattr(enemy, 'parry', 0)
+        if enemy_parry > 1.0:  # Convert percentage if needed
+            enemy_parry = enemy_parry / 100.0
+        
+        parry_roll = random.random()
+        was_parried = parry_roll <= enemy_parry
+        
+        if was_parried:
+            # Parry reduces damage by 50-75%
+            parry_reduction = random.uniform(0.5, 0.75)
+            total_damage = int(total_damage * (1 - parry_reduction))
+            total_damage = max(1, total_damage)  # Minimum 1 damage
+        
+        # === APPLY DAMAGE ===
+        player_armor_penetration = self.armor_penetration
+        result = enemy.take_damage(total_damage, player_armor_penetration)
+        
+        # === EXPERIENCE AND LEVELING ===
         enemy_died = result["died"]
         leveled_up = False
         exp_gained = 0
@@ -232,15 +338,141 @@ class Player:
             monster_level = getattr(enemy, 'level', None)
             exp_gained = getattr(enemy, "exp_reward", 0)
             leveled_up = self.gain_exp(exp_gained, monster_level)
-
-        return {
+        
+        # === COMBAT RESULT ===
+        combat_result = {
             "type": "combat",
             "attacker": self.name,
             "target": enemy.name,
-            "damage": damage,
+            "damage": total_damage,
+            "hit": True,
+            "critical": is_critical,
+            "parried": was_parried,
             "enemy_died": enemy_died,
             "exp_gained": exp_gained,
-            "leveled_up": leveled_up
+            "leveled_up": leveled_up,
+            "deflected": result.get("deflected", 0),
+            "damage_reduction": result.get("damage_reduction", 0)
+        }
+        
+        # Add descriptive message based on what happened
+        combat_result["message"] = self._generate_combat_message(
+            enemy, total_damage, is_critical, was_parried, base_damage, damage_variance, result
+        )
+        
+        return combat_result
+
+    def _generate_combat_message(self, enemy, total_damage, is_critical, was_parried, base_damage, damage_variance, damage_result=None, attack_type="basic_attack"):
+        """Generate descriptive combat messages based on class, attack type, and circumstances"""
+        import random
+        
+        # Determine attack effectiveness based on actual damage vs base damage
+        # This gives us a clearer picture of effectiveness after all modifiers
+        damage_effectiveness = (total_damage - base_damage) / base_damage if base_damage > 0 else 0
+        
+        # Get class-specific and attack-type-specific messages
+        messages = self._get_class_attack_messages(attack_type, damage_effectiveness)
+        base_message = random.choice(messages["base"]).format(
+            player=self.name, 
+            enemy=enemy.name
+        )
+        
+        # Add critical hit flavor
+        if is_critical and was_parried:
+            crit_parry_messages = messages.get("critical_parried", [
+                f"{base_message} - a critical strike, though partially deflected by {enemy.name}'s defenses",
+                f"{base_message} - finding a vital spot despite {enemy.name}'s defensive efforts", 
+                f"{base_message} - a devastating blow that overwhelms {enemy.name}'s parry attempt"
+            ])
+            final_message = random.choice(crit_parry_messages).format(
+                base=base_message, player=self.name, enemy=enemy.name
+            )
+        elif is_critical:
+            crit_messages = messages.get("critical", [
+                f"{base_message} - finding a critical weakness!",
+                f"{base_message} - exploiting a vital opening in {enemy.name}'s guard!",
+                f"{base_message} - striking a devastating blow to a vulnerable spot!",
+                f"{base_message} - landing a perfectly placed critical hit!"
+            ])
+            final_message = random.choice(crit_messages).format(
+                base=base_message, player=self.name, enemy=enemy.name
+            )
+        elif was_parried:
+            parry_messages = messages.get("parried", [
+                f"{base_message}, but {enemy.name} deflects some of the impact",
+                f"{base_message}, though {enemy.name} manages to parry part of the attack",
+                f"{base_message}, but {enemy.name}'s defenses reduce the damage",
+                f"{base_message}, partially blocked by {enemy.name}'s defensive stance"
+            ])
+            final_message = random.choice(parry_messages).format(
+                base=base_message, player=self.name, enemy=enemy.name
+            )
+        else:
+            # Add class-specific skill flavor for normal hits
+            skill_flavors = messages.get("skill_flavors", [
+                " with practiced skill",
+                " using combat expertise", 
+                " with trained precision",
+                " drawing on battle experience",
+                ""  # Sometimes just the basic message
+            ])
+            final_message = base_message + random.choice(skill_flavors)
+        
+        # Add deflection information if damage was reduced
+        if damage_result and damage_result.get("deflected", 0) > 0:
+            deflected_amount = damage_result["deflected"]
+            damage_reduction = damage_result.get("damage_reduction", 0)
+            
+            if damage_reduction > 0:
+                final_message += f" ({enemy.name} deflects {deflected_amount} damage with {damage_reduction}% damage reduction)"
+            else:
+                final_message += f" ({enemy.name} deflects {deflected_amount} damage)"
+        
+        return final_message
+
+    def _get_class_attack_messages(self, attack_type, damage_effectiveness):
+        """Get class and attack-type specific combat message templates from database"""
+        from game.player.player_database import PlayerDatabase
+        
+        # Get messages from database
+        class_key = self.archetype.lower()
+        class_data = PlayerDatabase.CLASSES.get(class_key)
+        
+        # Fallback to warrior if class not found
+        if not class_data or "combat_messages" not in class_data:
+            class_data = PlayerDatabase.CLASSES.get("warrior", {})
+        
+        combat_messages = class_data.get("combat_messages", {})
+        attack_messages = combat_messages.get(attack_type)
+        
+        # Fallback to basic_attack if attack type not found
+        if not attack_messages:
+            attack_messages = combat_messages.get("basic_attack", {})
+        
+        # If still no messages, provide basic fallback
+        if not attack_messages:
+            attack_messages = {
+                "high": ["{player} strikes {enemy} with great force"],
+                "low": ["{player} barely hits {enemy}"],
+                "normal": ["{player} attacks {enemy}"],
+                "critical": ["{base} - a critical hit!"],
+                "skill_flavors": [""]
+            }
+        
+        # Select appropriate damage tier based on effectiveness
+        # Positive effectiveness = better than base damage (high roll, crit, etc.)
+        # Negative effectiveness = worse than base damage (low roll, parried, etc.)
+        if damage_effectiveness > 0.20:  # Significantly higher than base damage
+            base_messages = attack_messages.get("high", attack_messages.get("normal", ["{player} attacks {enemy}"]))
+        elif damage_effectiveness < -0.15:  # Significantly lower than base damage  
+            base_messages = attack_messages.get("low", attack_messages.get("normal", ["{player} attacks {enemy}"]))
+        else:  # Normal damage range (close to base damage)
+            base_messages = attack_messages.get("normal", ["{player} attacks {enemy}"])
+            
+        return {
+            "base": base_messages,
+            "critical": attack_messages.get("critical", []),
+            "skill_flavors": attack_messages.get("skill_flavors", [""])
         }
 
     # ---- inventory & equipment passthroughs ----
@@ -304,6 +536,10 @@ class Player:
             'parry': self.parry,
             'athletism': self.athletism,
             'cunning': self.cunning,
+            'crit_chance': self.crit_chance,
+            'crit_damage': self.crit_damage,
+            'armor': self.armor,
+            'block_chance': self.block_chance,
             'exp': self.exp,
             'exp_to_next': self.exp_to_next,
             'position': (self.x, self.y)

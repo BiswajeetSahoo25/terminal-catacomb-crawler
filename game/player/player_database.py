@@ -23,14 +23,14 @@ class PlayerDatabase:
             "mana":             {"name": "Mana", "description": "Spell resource", "formula": "intelligence * 12 + willpower * 5", "min_value": 0, "max_value": 999},
             "stamina":          {"name": "Stamina", "description": "Action energy", "formula": "athletism * 8 + vitality * 2", "min_value": 0,  "max_value": 500},
             "parry":            {"name": "Parry Chance", "description": "Deflect hits", "formula": "strength * 0.5", "min_value": 0,  "max_value": 90},
-            "dodge":            {"name": "Dodge Chance", "description": "Avoid hits", "formula": "dexterity * 0.4 + athletism * 0.2", "min_value": 0, "max_value": 95},
-            "accuracy":         {"name": "Accuracy", "description": "Hit chance", "formula": "dexterity * 0.6 + cunning * 0.3", "min_value": 10, "max_value": 100},
+            "dodge":            {"name": "Dodge Chance", "description": "Avoid hits", "formula": "dexterity * 1.0 + athletism * 0.3", "min_value": 0, "max_value": 95},
+            "accuracy":         {"name": "Accuracy", "description": "Hit chance", "formula": "70 + dexterity * 1.5 + cunning * 0.8", "min_value": 10, "max_value": 100},
             "crit_chance":      {"name": "Critical Hit Chance", "description": "Crit probability", "formula": "cunning * 0.5 + luck * 0.2", "min_value": 0, "max_value": 100},
             "crit_damage":      {"name": "Critical Damage", "description": "Crit multiplier %", "formula": "150 + (cunning * 0.3)", "min_value": 100, "max_value": 300},
-            "defense":          {"name": "Defense", "description": "Reduce physical dmg (%)", "formula": "vitality * 0.5 + strength * 0.3 + athletism * 0.2", "min_value": 0, "max_value": 999},
+            "defense":          {"name": "Defense", "description": "Base defensive capability", "formula": "vitality * 0.6 + strength * 0.6 + athletism * 0.4", "min_value": 0, "max_value": 999},
             # "magic_resistance": {"name": "Magic Resistance", "description": "Reduce magic dmg (%)", "formula": "willpower * 0.5 + intelligence * 0.2", "min_value": 0, "max_value": 90},
             "resilience":       {"name": "Resilience", "description": "Status effect resistance", "formula": "vitality * 0.3 + willpower * 0.5", "min_value": 0, "max_value": 95},
-            "attack":           {"name": "Attack", "description": "Physical damage scaler", "formula": "strength * 2 + dexterity * 0.5", "min_value": 1, "max_value": 999},
+            "attack":           {"name": "Attack", "description": "Physical damage scaler", "formula": "strength * 2 + dexterity * 0.5 + luck * 0.3", "min_value": 1, "max_value": 999},
             "speed":            {"name": "Speed", "description": "Movement/turn pacing", "formula": "dexterity * 0.5 + athletism * 0.5", "min_value": 1, "max_value": 200},
             # new high-impact
             "initiative":   {"name": "Initiative", "description": "Turn order / action speed", "formula": "dexterity * 0.7 + athletism * 0.3", "min_value": 0, "max_value": 200},
@@ -50,6 +50,10 @@ class PlayerDatabase:
             "perception":   {"name": "Perception", "description": "Detect traps & secrets", "formula": "cunning * 0.5 + luck * 0.5", "min_value": 0, "max_value": 100},
             "light_radius": {"name": "Light Radius", "description": "Sight distance in darkness", "formula": "perception * 0.3 + (luck * 0.1)", "min_value": 1, "max_value": 15},
             "carry_capacity":{"name": "Carry Capacity", "description": "Encumbrance threshold", "formula": "50 + strength * 5 + athletism * 2", "min_value": 10, "max_value": 999},
+            
+            # Combat penetration and resistance
+            "armor_penetration": {"name": "Armor Penetration", "description": "Bypasses enemy armor %", "formula": "cunning * 0.8 + willpower * 0.4 + luck * 0.2 + strength * 0.1", "min_value": 0, "max_value": 80},
+            "damage_reduction": {"name": "Damage Reduction", "description": "% of damage that can be reduced", "formula": "defense * 0.6 + willpower * 0.4", "min_value": 0, "max_value": 75},
         },
     }
 
@@ -57,7 +61,7 @@ class PlayerDatabase:
         # melee bruiser / off-tank
         "warrior": {
             "labels": ["melee", "bruiser", "tankish"],
-            "starting_main_bonus": {"strength": +4, "vitality": +4},
+            "starting_main_bonus": {"strength": +4, "vitality": +6},
             "main_affinity": {
                 "strength": 1.15, "vitality": 1.10, "athletism": 1.05,
                 "dexterity": 1.00, "cunning": 0.95, "intelligence": 0.90,
@@ -66,13 +70,51 @@ class PlayerDatabase:
             "derived_affinity": {
                 # existing
                 "health": 1.20, "defense": 1.30, "parry": 1.25, "stamina": 1.20,
-                "accuracy": 1.00, "dodge": 0.95, "crit_chance": 0.95, "crit_damage": 1.00,
+                "accuracy": 1.00, "dodge": 0.90, "crit_chance": 0.95, "crit_damage": 1.00,
                 "mana": 0.80, "magic_resistance": 1.00, "resilience": 1.10,
                 # new
                 "initiative": 1.00, "armor": 1.25, "block_chance": 1.25, "block_amount": 1.20,
                 "hp_regen": 1.15, "mana_regen": 0.85, "stamina_regen": 1.10,
                 "spell_power": 0.85, "status_power": 0.95, "healing_power": 0.95,
                 "stealth": 0.90, "perception": 1.00, "light_radius": 1.00, "carry_capacity": 1.25,
+                "armor_penetration": 1.05, "damage_reduction": 1.10,
+            },
+            "combat_messages": {
+                "basic_attack": {
+                    "high": [
+                        "{player} strikes {enemy} with devastating force",
+                        "{player} delivers a crushing blow to {enemy}",
+                        "{player} lands a mighty strike on {enemy}",
+                        "{player} hammers {enemy} with brutal strength",
+                        "{player} overwhelms {enemy} with raw power"
+                    ],
+                    "low": [
+                        "{player} grazes {enemy} with a glancing blow",
+                        "{player} barely connects with {enemy}",
+                        "{player} lands a weak strike on {enemy}",
+                        "{player} hits {enemy} with reduced impact"
+                    ],
+                    "normal": [
+                        "{player} strikes {enemy} with trained precision",
+                        "{player} hits {enemy} with disciplined force",
+                        "{player} connects solidly with {enemy}",
+                        "{player} lands a practiced blow on {enemy}",
+                        "{player} attacks {enemy} with warrior's skill"
+                    ],
+                    "critical": [
+                        "{base} - finding a gap in {enemy}'s armor!",
+                        "{base} - exploiting {enemy}'s weakness with warrior's instinct!",
+                        "{base} - delivering a devastating battle-tested strike!",
+                        "{base} - overwhelming {enemy} with superior combat training!"
+                    ],
+                    "skill_flavors": [
+                        " with battle-hardened experience",
+                        " using warrior's discipline", 
+                        " with military precision",
+                        " drawing on countless battles",
+                        ""
+                    ]
+                }
             },
         },
 
@@ -88,12 +130,49 @@ class PlayerDatabase:
             "derived_affinity": {
                 "mana": 1.25, "magic_resistance": 1.10, "accuracy": 1.05,
                 "crit_chance": 1.05, "crit_damage": 1.10,
-                "health": 0.90, "defense": 0.85, "parry": 0.85, "dodge": 0.95, "stamina": 0.95, "resilience": 1.00,
+                "health": 0.90, "defense": 0.85, "parry": 0.85, "dodge": 0.70, "stamina": 0.95, "resilience": 1.00,
                 # new
                 "initiative": 1.00, "armor": 0.85, "block_chance": 0.80, "block_amount": 0.85,
                 "hp_regen": 0.95, "mana_regen": 1.25, "stamina_regen": 0.95,
                 "spell_power": 1.30, "status_power": 1.20, "healing_power": 1.10,
                 "stealth": 0.95, "perception": 1.05, "light_radius": 1.10, "carry_capacity": 0.85,
+            },
+            "combat_messages": {
+                "basic_attack": {
+                    "high": [
+                        "{player} channels arcane energy into a powerful strike against {enemy}",
+                        "{player} delivers a magically-enhanced blow to {enemy}",
+                        "{player} strikes {enemy} with spell-augmented force",
+                        "{player} hits {enemy} with crackling magical energy",
+                        "{player} overwhelms {enemy} with mystical power"
+                    ],
+                    "low": [
+                        "{player} barely manages to graze {enemy}",
+                        "{player} strikes {enemy} but the magic fizzles",
+                        "{player} lands a weak, unfocused hit on {enemy}",
+                        "{player} hits {enemy} with diminished magical force"
+                    ],
+                    "normal": [
+                        "{player} strikes {enemy} with focused magical energy",
+                        "{player} hits {enemy} using arcane-enhanced precision",
+                        "{player} connects with {enemy} through mystical force",
+                        "{player} attacks {enemy} with scholarly precision",
+                        "{player} channels magic into a measured strike against {enemy}"
+                    ],
+                    "critical": [
+                        "{base} - unleashing a surge of arcane power!",
+                        "{base} - channeling pure magical energy into {enemy}!",
+                        "{base} - weaving a devastating spell-strike!",
+                        "{base} - focusing mystical forces with deadly effect!"
+                    ],
+                    "skill_flavors": [
+                        " with arcane knowledge",
+                        " using mystical training", 
+                        " with scholarly precision",
+                        " drawing on magical studies",
+                        ""
+                    ]
+                }
             },
         },
 
@@ -107,7 +186,7 @@ class PlayerDatabase:
                 "intelligence": 1.00, "willpower": 1.00, "charisma": 1.00,
             },
             "derived_affinity": {
-                "accuracy": 1.15, "dodge": 1.20, "crit_chance": 1.20, "crit_damage": 1.10,
+                "accuracy": 1.15, "dodge": 1.10, "crit_chance": 1.20, "crit_damage": 1.10,
                 "parry": 0.95, "defense": 0.90, "health": 0.95, "mana": 1.00, "stamina": 1.10,
                 "magic_resistance": 0.95, "resilience": 1.00,
                 # new
@@ -115,6 +194,43 @@ class PlayerDatabase:
                 "hp_regen": 1.00, "mana_regen": 1.00, "stamina_regen": 1.10,
                 "spell_power": 0.95, "status_power": 1.10, "healing_power": 0.95,
                 "stealth": 1.30, "perception": 1.20, "light_radius": 1.05, "carry_capacity": 1.00,
+            },
+            "combat_messages": {
+                "basic_attack": {
+                    "high": [
+                        "{player} strikes {enemy} from an unexpected angle",
+                        "{player} delivers a precise blow to {enemy}'s vitals",
+                        "{player} finds a critical opening in {enemy}'s guard",
+                        "{player} exploits {enemy}'s blind spot expertly",
+                        "{player} strikes {enemy} with lethal accuracy"
+                    ],
+                    "low": [
+                        "{player} attempts a strike but {enemy} shifts away",
+                        "{player} barely scratches {enemy}",
+                        "{player} lands a glancing hit on {enemy}",
+                        "{player} strikes {enemy} but misjudges the angle"
+                    ],
+                    "normal": [
+                        "{player} strikes {enemy} with cunning precision",
+                        "{player} hits {enemy} from the shadows",
+                        "{player} connects with {enemy} using stealth and skill",
+                        "{player} lands a calculated strike on {enemy}",
+                        "{player} attacks {enemy} with rogue's finesse"
+                    ],
+                    "critical": [
+                        "{base} - finding the perfect moment to strike!",
+                        "{base} - exploiting {enemy}'s vulnerability with deadly precision!",
+                        "{base} - striking a vital point with assassin's skill!",
+                        "{base} - delivering a perfectly timed critical blow!"
+                    ],
+                    "skill_flavors": [
+                        " with shadowy finesse",
+                        " using stealth and cunning", 
+                        " with thief's precision",
+                        " drawing on underhanded tactics",
+                        ""
+                    ]
+                }
             },
         },
 
@@ -137,6 +253,43 @@ class PlayerDatabase:
                 "spell_power": 0.95, "status_power": 1.15, "healing_power": 0.95,
                 "stealth": 1.20, "perception": 1.15, "light_radius": 1.00, "carry_capacity": 1.05,
             },
+            "combat_messages": {
+                "basic_attack": {
+                    "high": [
+                        "{player} strikes {enemy} with ruthless efficiency",
+                        "{player} delivers a dirty blow to {enemy}",
+                        "{player} hits {enemy} with street-smart brutality",
+                        "{player} exploits {enemy}'s guard with cunning force",
+                        "{player} overwhelms {enemy} with underhanded tactics"
+                    ],
+                    "low": [
+                        "{player} barely scratches {enemy}",
+                        "{player} attempts a cheap shot but misses the mark",
+                        "{player} lands a weak hit on {enemy}",
+                        "{player} strikes {enemy} but lacks proper technique"
+                    ],
+                    "normal": [
+                        "{player} strikes {enemy} with street-wise cunning",
+                        "{player} hits {enemy} using underhanded methods",
+                        "{player} connects with {enemy} through dirty fighting",
+                        "{player} attacks {enemy} with bandit's opportunism",
+                        "{player} lands a calculated cheap shot on {enemy}"
+                    ],
+                    "critical": [
+                        "{base} - exploiting {enemy}'s trust with a devastating betrayal!",
+                        "{base} - landing a perfectly timed sucker punch!",
+                        "{base} - striking {enemy} where it hurts most!",
+                        "{base} - using dirty tactics to devastating effect!"
+                    ],
+                    "skill_flavors": [
+                        " with street-smart brutality",
+                        " using underhanded tactics", 
+                        " with criminal cunning",
+                        " drawing on outlaw experience",
+                        ""
+                    ]
+                }
+            },
         },
 
         # drainy caster with resilience
@@ -151,12 +304,49 @@ class PlayerDatabase:
             "derived_affinity": {
                 "mana": 1.20, "magic_resistance": 1.15, "resilience": 1.10,
                 "crit_chance": 1.05, "crit_damage": 1.05,
-                "health": 0.95, "defense": 0.90, "parry": 0.90, "dodge": 0.95, "accuracy": 1.00, "stamina": 0.95,
+                "health": 0.95, "defense": 0.90, "parry": 0.90, "dodge": 0.50, "accuracy": 1.00, "stamina": 0.95,
                 # new
                 "initiative": 0.95, "armor": 0.90, "block_chance": 0.85, "block_amount": 0.85,
                 "hp_regen": 1.05, "mana_regen": 1.20, "stamina_regen": 0.95,
                 "spell_power": 1.25, "status_power": 1.30, "healing_power": 1.00,
                 "stealth": 1.00, "perception": 1.05, "light_radius": 1.05, "carry_capacity": 0.90,
+            },
+            "combat_messages": {
+                "basic_attack": {
+                    "high": [
+                        "{player} strikes {enemy} with dark energy",
+                        "{player} delivers a shadow-infused blow to {enemy}",
+                        "{player} hits {enemy} with corrupting force",
+                        "{player} channels eldritch power into a strike against {enemy}",
+                        "{player} overwhelms {enemy} with forbidden magic"
+                    ],
+                    "low": [
+                        "{player} barely grazes {enemy} with dark energy",
+                        "{player} strikes {enemy} but the shadows waver",
+                        "{player} lands a weak, unfocused dark strike on {enemy}",
+                        "{player} hits {enemy} with diminished eldritch force"
+                    ],
+                    "normal": [
+                        "{player} strikes {enemy} with shadowy power",
+                        "{player} hits {enemy} using dark magic",
+                        "{player} connects with {enemy} through eldritch force",
+                        "{player} attacks {enemy} with warlock's cunning",
+                        "{player} channels forbidden energy into a strike against {enemy}"
+                    ],
+                    "critical": [
+                        "{base} - unleashing a torrent of dark power!",
+                        "{base} - channeling eldritch horror into {enemy}!",
+                        "{base} - weaving shadows into a devastating strike!",
+                        "{base} - cursing {enemy} with forbidden magic!"
+                    ],
+                    "skill_flavors": [
+                        " with dark knowledge",
+                        " using forbidden arts", 
+                        " with eldritch precision",
+                        " drawing on shadow magic",
+                        ""
+                    ]
+                }
             },
         },
 
@@ -171,12 +361,49 @@ class PlayerDatabase:
             },
             "derived_affinity": {
                 "health": 1.15, "defense": 1.20, "parry": 1.10, "resilience": 1.15, "magic_resistance": 1.10,
-                "mana": 1.05, "accuracy": 1.00, "dodge": 0.95, "crit_chance": 0.95, "crit_damage": 1.00, "stamina": 1.10,
+                "mana": 1.05, "accuracy": 1.00, "dodge": 0.70, "crit_chance": 0.95, "crit_damage": 1.00, "stamina": 1.10,
                 # new
                 "initiative": 1.00, "armor": 1.25, "block_chance": 1.25, "block_amount": 1.25,
                 "hp_regen": 1.15, "mana_regen": 1.10, "stamina_regen": 1.10,
                 "spell_power": 1.05, "status_power": 0.95, "healing_power": 1.25,
                 "stealth": 0.90, "perception": 1.05, "light_radius": 1.10, "carry_capacity": 1.10,
+            },
+            "combat_messages": {
+                "basic_attack": {
+                    "high": [
+                        "{player} strikes {enemy} with righteous fury",
+                        "{player} delivers a holy-blessed blow to {enemy}",
+                        "{player} smites {enemy} with divine power",
+                        "{player} channels sacred energy into a mighty strike against {enemy}",
+                        "{player} overwhelms {enemy} with blessed strength"
+                    ],
+                    "low": [
+                        "{player} barely connects with {enemy}",
+                        "{player} lands a glancing blessed strike on {enemy}",
+                        "{player} hits {enemy} with diminished holy power",
+                        "{player} strikes {enemy} but wavers in conviction"
+                    ],
+                    "normal": [
+                        "{player} strikes {enemy} with holy determination",
+                        "{player} hits {enemy} with righteous purpose",
+                        "{player} connects with {enemy} through divine guidance",
+                        "{player} attacks {enemy} with sacred resolve",
+                        "{player} delivers a blessed strike to {enemy}"
+                    ],
+                    "critical": [
+                        "{base} - channeling divine wrath against evil!",
+                        "{base} - delivering sacred justice to {enemy}!",
+                        "{base} - smiting {enemy} with holy power!",
+                        "{base} - unleashing righteous fury upon {enemy}!"
+                    ],
+                    "skill_flavors": [
+                        " with divine blessing",
+                        " using sacred training", 
+                        " with righteous conviction",
+                        " drawing on holy power",
+                        ""
+                    ]
+                }
             },
         },
     }

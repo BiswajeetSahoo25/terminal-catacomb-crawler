@@ -109,14 +109,17 @@ class MonsterDatabase:
     # Derived stats calculated from main stats using formulas
     DERIVED_STATS = {
         'hp': 'vitality * 8 + might * 2',
-        'attack': 'might * 2 + ferocity * 3',
+        'attack': 'might * 0.6 + ferocity * 2',
         'defense': 'vitality * 1 + might * 1', 
         'speed': 'agility * 2 + vitality * 1',
         'accuracy': '70 + agility * 2 + cunning * 1',
         'dodge': 'agility * 3 + cunning * 1',
+        'parry': 'agility * 2 + might * 1',
         'intimidation': 'ferocity * 2 + might * 1',
         'magic_power': 'mysticism * 4 + cunning * 1',
-        'detection_range': 'cunning * 1 + agility * 1'
+        'detection_range': 'cunning * 1 + agility * 1',
+        'armor_penetration': 'cunning * 0.5 + ferocity * 0.3',
+        'damage_reduction': 'defense * 0.20 + might * 0.4'
     }
     
     # Creature types with stat affinities (multipliers for main stats)
