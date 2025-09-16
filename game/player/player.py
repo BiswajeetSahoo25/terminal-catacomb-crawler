@@ -48,6 +48,7 @@ class Player:
         self.level = 1
         self.exp = 0
         self.exp_to_next = 100
+        self.stat_points = 0  # Available stat points to spend
 
         # Display
         self.symbol = '@'
@@ -74,6 +75,37 @@ class Player:
             alloc[k] = alloc.get(k, 0) + int(v)
         self.stats.set_allocated_main(alloc)
         self.recalculate_stats()
+
+    def spend_stat_point(self, stat_name, amount=1):
+        """Spend available stat points on a specific stat"""
+        if self.stat_points < amount:
+            return False, "Not enough stat points available"
+        
+        if stat_name not in self.stats.db.STATS["main"]:
+            return False, f"Invalid stat: {stat_name}"
+        
+        # Check max value constraint
+        current_allocated = self.stats.allocated_main.get(stat_name, 0)
+        stat_config = self.stats.db.STATS["main"][stat_name]
+        if current_allocated + amount > stat_config["max_value"]:
+            return False, f"{stat_name} is already at maximum value"
+        
+        # Spend the points
+        self.stat_points -= amount
+        alloc = dict(self.stats.allocated_main)
+        alloc[stat_name] = alloc.get(stat_name, 0) + amount
+        self.stats.set_allocated_main(alloc)
+        
+        # Preserve HP ratio when recalculating
+        old_ratio = (self.hp / self.max_hp) if self.max_hp else 1.0
+        self.recalculate_stats()
+        self.hp = min(self.max_hp, int(round(self.max_hp * old_ratio)))
+        
+        return True, f"Added {amount} point(s) to {stat_name}"
+
+    def get_available_stat_points(self):
+        """Get number of available stat points"""
+        return self.stat_points
 
     # ---- items & equipment ----
     def set_starting_item(self, item):
@@ -151,6 +183,9 @@ class Player:
         Args:
             amount: Base experience amount
             monster_level: Optional monster level for multiplier calculation
+            
+        Returns:
+            bool: True if player leveled up, False otherwise
         """
         if monster_level is not None and monster_level > self.level:
             # Apply 2x multiplier for each level above player
@@ -159,19 +194,29 @@ class Player:
             amount = int(amount * multiplier)
         
         self.exp += amount
+        leveled_up = False
         while self.exp >= self.exp_to_next:
             self.level_up()
+            leveled_up = True
+        
+        return leveled_up
 
     def level_up(self):
-        """Level up the player (no auto-stat growth; you allocate points manually)"""
+        """Level up the player and grant stat points for allocation"""
         self.level += 1
         self.exp -= self.exp_to_next
         self.exp_to_next = int(self.exp_to_next * 1.5)
+        
+        # Grant 5 stat points per level
+        self.stat_points += 5
 
-        # Preserve HP ratio through the stat recompute
-        old_ratio = (self.hp / self.max_hp) if self.max_hp else 1.0
+        # Recalculate stats (may increase max HP)
         self.recalculate_stats()
-        self.hp = min(self.max_hp, int(round(self.max_hp * old_ratio)))
+        
+        # Fully restore health on level up
+        self.hp = self.max_hp
+        
+        return True  # Indicate level up occurred
 
     def attack_enemy(self, enemy):
         """Attack an enemy"""
@@ -181,9 +226,12 @@ class Player:
         result = enemy.take_damage(damage)
 
         enemy_died = result["died"]
+        leveled_up = False
+        exp_gained = 0
         if enemy_died:
             monster_level = getattr(enemy, 'level', None)
-            self.gain_exp(getattr(enemy, "exp_reward", 0), monster_level)
+            exp_gained = getattr(enemy, "exp_reward", 0)
+            leveled_up = self.gain_exp(exp_gained, monster_level)
 
         return {
             "type": "combat",
@@ -191,7 +239,8 @@ class Player:
             "target": enemy.name,
             "damage": damage,
             "enemy_died": enemy_died,
-            "exp_gained": getattr(enemy, "exp_reward", 0) if enemy_died else 0
+            "exp_gained": exp_gained,
+            "leveled_up": leveled_up
         }
 
     # ---- inventory & equipment passthroughs ----

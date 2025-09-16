@@ -232,10 +232,14 @@ class UI:
         dungeon_level = level_info.get("dungeon_level", 1) if level_info else 1
         
         # Stats
+        stat_points_text = ""
+        if hasattr(player, 'stat_points') and player.stat_points > 0:
+            stat_points_text = f" | {self.terminal.bold}{self.terminal.yellow}Stat Points: {player.stat_points}!{self.terminal.normal}"
+        
         print(f"Player Level: {stats['level']} | "
               f"Dungeon Level: {self.terminal.cyan(str(dungeon_level))} | "
               f"Attack: {stats['attack']} | "
-              f"Defense: {stats['defense']}")
+              f"Defense: {stats['defense']}{stat_points_text}")
         print(f"Location: {location_text} | Position: ({stats['position'][0]}, {stats['position'][1]})")
 
               
@@ -325,7 +329,7 @@ class UI:
             else:
                 print("COMBAT - Enemy Turn: Wait for your turn...")
         else:
-            print("EXPLORATION: WASD/Arrows=Move | E=Interact with Doors and Stairs | Q=Quit | I=Inventory")
+            print("EXPLORATION: WASD/Arrows=Move | E=Interact | Q=Quit | I=Inventory | C=Stats | L=Level Up")
         
     def show_inventory(self, player):
         """Display player inventory (placeholder for now)"""
@@ -391,6 +395,8 @@ class UI:
             print(self.terminal.yellow + self.terminal.bold + "LEVEL UP!" + self.terminal.normal)
             new_level = combat_stats.get("new_level", 1)
             print(f"You are now level {new_level}!")
+            print(f"{self.terminal.green}✚ Health fully restored!{self.terminal.normal}")
+            print(f"{self.terminal.cyan}📈 You gained 5 stat points to allocate! (Press 'L' to level up){self.terminal.normal}")
             
         print()
         print("=" * 50)

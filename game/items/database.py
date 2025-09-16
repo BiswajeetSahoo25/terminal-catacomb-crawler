@@ -13,14 +13,14 @@ ITEMS = {
             'symbol': '/',
             'color': 'red',
             'stats': {
-                'attack': 3,
+                'attack': 15,
                 'defense': 0,
-                'speed': -2,
+                'speed': -6,
                 'hp': 0
             },
             'requirements': {
                 'level': 1,
-                'strength': 0
+                'strength': 10
             }
         },
         'wooden_bow': {
@@ -32,14 +32,14 @@ ITEMS = {
             'symbol': '}',
             'color': 'yellow',
             'stats': {
-                'attack': 1,
+                'attack': 6,
                 'defense': 0,
-                'speed': 3,
+                'speed': 13,
                 'hp': 0
             },
             'requirements': {
                 'level': 1,
-                'dexterity': 0
+                'dexterity': 10
             }
         }
     },
@@ -54,9 +54,9 @@ ITEMS = {
             'color': 'white',
             'stats': {
                 'attack': 0,
-                'defense': 4,
+                'defense': 20,
                 'speed': -3,
-                'hp': 15
+                'hp': 35
             },
             'requirements': {
                 'level': 1,
@@ -75,9 +75,9 @@ ITEMS = {
             'color': 'blue',
             'stats': {
                 'attack': 0,
-                'defense': 3,
+                'defense': 15,
                 'speed': -1,
-                'hp': 5
+                'hp': 15
             },
             'requirements': {
                 'level': 1,
