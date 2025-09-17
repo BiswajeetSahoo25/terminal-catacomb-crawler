@@ -265,14 +265,17 @@ class Player:
         # Roll for hit
         hit_roll = random.random()
         if hit_roll > hit_chance:
-            # Generate detailed miss message
+            # Generate clearer miss message
             miss_reason = ""
-            if player_accuracy < 0.8:
+            if player_accuracy < 0.6:
                 miss_reason = f" (Low accuracy: {player_accuracy*100:.0f}%)"
-            elif enemy_dodge > 0.1:
-                miss_reason = f" (Enemy dodged: {enemy_dodge*100:.0f}% dodge chance)"
+            elif enemy_dodge > 0.15:
+                miss_reason = f" (Enemy dodged)"
             else:
-                miss_reason = f" (Bad luck: rolled {hit_roll*100:.0f}% vs {hit_chance*100:.0f}% hit chance)"
+                # Show as "needed X% or lower, rolled Y%" which is more intuitive
+                needed = int(hit_chance * 100)
+                rolled = int(hit_roll * 100)
+                miss_reason = f" (Needed ≤{needed}%, rolled {rolled}%)"
             
             return {
                 "type": "combat",
