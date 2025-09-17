@@ -60,7 +60,7 @@ class MonsterStatsSystem:
     def calculate_attack_stats(self, attack_data, main_stats):
         """Calculate dynamic attack damage and accuracy from formulas"""
         result = attack_data.copy()
-        
+
         # Calculate damage if formula provided
         if 'damage_formula' in attack_data:
             try:

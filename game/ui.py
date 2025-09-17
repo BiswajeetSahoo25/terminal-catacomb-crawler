@@ -259,7 +259,7 @@ class UI:
         
               
     def render_combat_messages(self, combat_messages):
-        """Render recent combat messages"""
+        """Render recent combat messages using rich data from execute_attack, attack_player, and attack_enemy"""
         if not combat_messages:
             return
             
@@ -270,58 +270,17 @@ class UI:
         
         for msg in recent_messages:
             if msg["type"] == "combat":
-                if "target" in msg:  # Player attacking enemy
-                    # Use enhanced message if available, otherwise fall back to basic format
-                    if msg.get("message"):
-                        text = msg["message"]
-                        # Add damage amount if not in message and hit was successful
-                        if msg.get("hit", True) and f"({msg['damage']} damage)" not in text:
-                            text += f" ({msg['damage']} damage)"
-                    else:
-                        # Fallback to basic format
-                        text = f"{msg['attacker']} attacks {msg['target']} for {msg['damage']} damage!"
-                    
-                    # Add defeat and experience info
-                    if msg.get("target_died"):
-                        text += f" {msg['target']} defeated! (+{msg.get('exp_gained', 0)} XP)"
-                    
-                    # Add special combat indicators
-                    if msg.get("critical"):
-                        text = "💥 " + text  # Critical hit indicator
-                    if msg.get("parried"):
-                        text = "🛡️ " + text  # Parry indicator
-                    
+                if "target" in msg:  # Player attacking enemy - use rich player attack data
+                    text = self._format_player_attack(msg)
                     print(f"  {self.terminal.green(text)}")
                 elif "defender" in msg:  # Defend action
                     print(f"  {self.terminal.blue(msg['message'])}")
-                else:  # Enemy attacking player - use rich monster attack info
-                    if msg.get("hit", True):
-                        # Check for rich attack information from monster system
-                        if msg.get("attack_name") and msg.get("description"):
-                            damage = msg.get('damage', 0)
-                            if damage > 0:
-                                text = f"{msg['attacker']} uses {msg['attack_name']} - {msg.get('description', 'attacks')} ({damage} damage)"
-                            else:
-                                text = f"{msg['attacker']} uses {msg['attack_name']} - {msg.get('description', 'attacks')} but deals no damage!"
-                        else:
-                            damage = msg.get('damage', 0)
-                            if damage > 0:
-                                text = f"{msg['attacker']} attacks you for {damage} damage!"
-                            else:
-                                text = f"{msg['attacker']} attacks you but deals no damage!"
-                        
-                        # Add special effects description
-                        if msg.get("special_effects"):
-                            effect_type = msg["special_effects"].get("type", "")
-                            if effect_type:
-                                text += f" [Special: {effect_type.title()}]"
-                    else:
-                        # Use the detailed description from combat system - DON'T override it!
-                        text = msg.get('description', f"{msg['attacker']} misses completely!")
-                    
+                else:  # Enemy attacking player - use rich monster attack data
+                    text = self._format_monster_attack(msg)
+                    color = self.terminal.red
                     if msg.get("player_died"):
-                        text += " You have fallen!"
-                    print(f"  {self.terminal.red(text)}")
+                        color = self.terminal.red + self.terminal.bold
+                    print(f"  {color(text)}")
             elif msg["type"] == "deflection":
                 print(f"  {self.terminal.blue + self.terminal.bold}⚡ {msg['message']}{self.terminal.normal}")
             elif msg["type"] == "combat_detail":
@@ -330,6 +289,114 @@ class UI:
                 print(f"  {self.terminal.dim}{msg['message']}{self.terminal.normal}")
             elif msg["type"] == "system":
                 print(f"  {self.terminal.yellow(msg['message'])}")
+    
+    def _format_player_attack(self, msg):
+        """Format player attack messages using rich data from attack_enemy"""
+        if not msg.get("hit", True):
+            # Handle miss with clearer explanation
+            attacker = msg.get("attacker", "Player")
+            target = msg.get("target", "Enemy")
+            
+            # Simplify miss message - the technical details confuse players
+            hit_chance = msg.get("hit_chance", 0)
+            if hit_chance < 0.5:
+                reason = "low accuracy"
+            elif msg.get("enemy_dodge", 0) > 0.15:
+                reason = "enemy dodged"
+            else:
+                reason = "missed"
+            
+            return f"{attacker} {reason} {target}!"
+        
+        # Use the detailed message from player.attack_enemy if available
+        if msg.get("message"):
+            text = msg["message"]
+            # Ensure damage is shown if not already in message
+            if f"({msg['damage']} damage)" not in text and msg['damage'] > 0:
+                text += f" ({msg['damage']} damage)"
+        else:
+            # Fallback formatting
+            text = f"{msg['attacker']} attacks {msg['target']} for {msg['damage']} damage!"
+        
+        # Add critical hit indicator
+        if msg.get("critical"):
+            text = "💥 " + text
+        
+        # Add parry indicator  
+        if msg.get("parried"):
+            text = "🛡️ " + text
+        
+        # Don't integrate deflection - it will be shown separately like before
+        
+        # Add defeat and experience info
+        if msg.get("target_died") or msg.get("enemy_died"):
+            exp_gained = msg.get("exp_gained", 0)
+            target_name = msg.get("target", "Enemy")
+            text += f" {target_name} defeated!"
+            if exp_gained > 0:
+                text += f" (+{exp_gained} XP)"
+            
+            # Add level up notification
+            if msg.get("leveled_up"):
+                text += " ⭐ LEVEL UP! ⭐"
+        
+        return text
+    
+    def _format_monster_attack(self, msg):
+        """Format monster attack messages using rich data from attack_player"""
+        attacker = msg['attacker']
+        
+        if not msg.get("hit", True):
+            # Handle miss with clearer explanation
+            if msg.get("dodged"):
+                return f"You dodge {attacker}'s attack!"
+            else:
+                # Simplify miss message - remove confusing technical details
+                attack_name = msg.get("attack_name", "attack")
+                return f"{attacker}'s {attack_name} misses!"
+        
+        # Hit - build description without deflection (deflection shown separately)
+        damage = msg.get('damage', 0)
+        
+        # Use attack name and description if available (from monster system)
+        if msg.get("attack_name") and msg.get("description"):
+            attack_name = msg["attack_name"]
+            description = msg.get("description", "attacks")
+            
+            if damage > 0:
+                text = f"{attacker} uses {attack_name} - {description} (deals {damage} damage)"
+            else:
+                text = f"{attacker} uses {attack_name} - {description} but deals no damage!"
+        else:
+            # Fallback for basic attacks
+            if damage > 0:
+                text = f"{attacker} attacks you for {damage} damage!"
+            else:
+                text = f"{attacker} attacks you but deals no damage!"
+        
+        # Add special effects information
+        if msg.get("special_effects"):
+            effect = msg["special_effects"]
+            effect_type = effect.get("type", "")
+            if effect_type:
+                # Add special effect icon and description
+                effect_icons = {
+                    "poison": "☠️",
+                    "intimidate": "😨", 
+                    "armor_break": "⚔️",
+                    "magic_damage": "✨",
+                    "stun": "⚡",
+                    "chain_attack": "💫"
+                }
+                icon = effect_icons.get(effect_type, "💫")
+                effect_name = effect_type.title().replace('_', ' ')
+                text += f" {icon} {effect_name}"
+        
+        # Add defeat message if player died
+        if msg.get("player_died") or msg.get("target_died"):
+            text += " 💀 You have fallen!"
+        
+        return text
               
     def create_bar(self, current, maximum, width):
         """Create a text-based progress bar"""

@@ -329,7 +329,10 @@ class Monster:
         # Calculate hit chance vs monster accuracy
         hit_roll = random.random()
         if hit_roll > chosen_attack['accuracy']:
-            miss_reason = f" (Rolled {hit_roll*100:.0f}% vs {chosen_attack['accuracy']*100:.0f}% accuracy)"
+            # Show clearer miss explanation
+            needed = int(chosen_attack['accuracy'] * 100)
+            rolled = int(hit_roll * 100)
+            miss_reason = f" (Needed ≤{needed}%, rolled {rolled}%)"
             return {
                 "type": "combat",
                 "attacker": self.name,
@@ -346,7 +349,10 @@ class Monster:
         player_dodge_chance = min(95, max(0, player.dodge)) / 100.0  # Convert to 0-1 range, cap at 95%
         dodge_roll = random.random()
         if dodge_roll <= player_dodge_chance:
-            dodge_reason = f" (Rolled {dodge_roll*100:.0f}% vs {player_dodge_chance*100:.0f}% dodge chance)"
+            # Show clearer dodge explanation  
+            needed = int(player_dodge_chance * 100)
+            rolled = int(dodge_roll * 100)
+            dodge_reason = f" (Rolled {rolled}% ≤ {needed}% dodge chance)"
             return {
                 "type": "combat",
                 "attacker": self.name,

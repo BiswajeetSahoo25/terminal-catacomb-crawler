@@ -899,14 +899,14 @@ class GameEngine:
         if result["success"]:
             self.combat_messages.append({"type": "combat", **result})
             
-            # Add deflection message if damage was deflected
+            # Add separate deflection message if damage was deflected (user prefers this format)
             deflected = result.get("deflected", 0)
             if deflected > 0:
                 damage_reduction = result.get("damage_reduction", 0)
                 if damage_reduction > 0:
-                    detailed_message = f"The Hero deflects {deflected} damage with {damage_reduction:.1f}% damage reduction!"
+                    detailed_message = f"Hero deflects {deflected} damage ({damage_reduction:.1f}% reduction)"
                 else:
-                    detailed_message = f"The Hero deflects {deflected} damage!"
+                    detailed_message = f"Hero deflects {deflected} damage"
                 
                 self.combat_messages.append({
                     "type": "deflection", 
@@ -951,11 +951,14 @@ class GameEngine:
             
             messages = [combat_message]
             
-            # Add deflection message if damage was deflected
+            # Add separate deflection message if damage was deflected (user prefers this format)
             deflected = monster_result.get("deflected", 0)
             if deflected > 0:
                 damage_reduction = monster_result.get("damage_reduction", 0)
-                detailed_message = f"The Hero deflects {deflected} damage with {damage_reduction:.1f}% damage reduction!"
+                if damage_reduction > 0:
+                    detailed_message = f"Hero deflects {deflected} damage ({damage_reduction:.1f}% reduction)"
+                else:
+                    detailed_message = f"Hero deflects {deflected} damage"
                 messages.append({"type": "deflection", "message": detailed_message})
             
             # Add detailed miss/dodge information if attack failed
@@ -963,12 +966,12 @@ class GameEngine:
                 if monster_result.get("dodged"):
                     dodge_roll = monster_result.get("dodge_roll", 0) * 100
                     dodge_chance = monster_result.get("player_dodge_chance", 0) * 100
-                    detail_msg = f"Dodge successful: Rolled {dodge_roll:.0f}% ≤ {dodge_chance:.1f}% dodge chance"
+                    detail_msg = f"💨 Dodge successful: Rolled {dodge_roll:.0f}% ≤ {dodge_chance:.0f}% dodge chance"
                     messages.append({"type": "combat_detail", "message": detail_msg})
                 elif monster_result.get("hit_roll") is not None:
                     hit_roll = monster_result.get("hit_roll", 0) * 100
                     accuracy = monster_result.get("monster_accuracy", 0) * 100
-                    detail_msg = f"Attack missed: Rolled {hit_roll:.0f}% > {accuracy:.0f}% accuracy"
+                    detail_msg = f"🎯 Attack missed: Needed ≤{accuracy:.0f}%, rolled {hit_roll:.0f}%"
                     messages.append({"type": "combat_detail", "message": detail_msg})
             
             return messages if len(messages) > 1 else combat_message
